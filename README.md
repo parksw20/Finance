@@ -38,7 +38,11 @@ uvicorn app.main:app --port 8000
 - CLI: `python -m app.refresh --inbox` 또는 `python -m app.refresh --file 파일.xlsm`
 
 ### 2. DART OpenAPI (상장사)
-- `.env`의 `DART_API_KEY`에 [OpenDART](https://opendart.fss.or.kr) 인증키를 넣으면 기업명으로 DART 기업코드를 자동 매핑하고 사업보고서(연결 우선)에서 손익·재무상태·현금흐름 총계를 가져옵니다.
+- [OpenDART](https://opendart.fss.or.kr) 인증키를 다음 중 한 곳에 두면 (우선순위 순) 기업명으로 DART 기업코드를 자동 매핑합니다.
+  1. 환경변수 `DART_API_KEY`
+  2. `.env`의 `DART_API_KEY`
+  3. OS 키체인: `keyring set finance-dashboard DART_API_KEY` 실행 후 키 입력 (Windows 자격 증명 관리자 / macOS 키체인 / Linux Secret Service). 서비스명은 `FINANCE_KEYRING_SERVICE`로 변경 가능
+- 키가 설정되면 기업명으로 DART 기업코드를 자동 매핑하고 사업보고서(연결 우선)에서 손익·재무상태·현금흐름 총계를 가져옵니다.
 - 판관비 세부 항목(인건비·광고선전비 등)은 주석 데이터라 API로 제공되지 않으므로 엑셀 입력값이 유지됩니다.
 - 비상장사(쿠팡, 무신사 등)는 DART 재무제표 API 대상이 아니므로 건너뛰고 이력에 기록됩니다.
 - CLI: `python -m app.refresh --dart --year 2025`
