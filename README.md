@@ -8,7 +8,7 @@
 ```bash
 pip install -r requirements.txt
 cp .env.example .env            # 필요 시 DART_API_KEY, REFRESH_SCHEDULE 수정
-uvicorn app.main:app --port 8000
+uvicorn app.main:app --port 8000     # 또는 run.bat / ./run.sh [포트]
 # http://localhost:8000
 ```
 
