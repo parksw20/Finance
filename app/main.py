@@ -15,7 +15,7 @@ from .config import DART_API_KEY, INBOX_DIR, REFRESH_ON_START, REFRESH_SCHEDULE,
 from .db import get_conn, init_db, connect
 from .metrics import available_years, company_metrics, default_year, fill_derived, load_amounts, load_sga_detail, sector_metrics, compute_ratios
 from .refresh import refresh_state, run_refresh, refresh_inbox
-from .seed import load_seed
+from .seed import load_seed, backfill_listed
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("finance")
@@ -28,6 +28,10 @@ def bootstrap():
     if n == 0:
         res = load_seed()
         log.info("seed 데이터 적재: %s", res)
+    else:
+        backfilled = backfill_listed()
+        if backfilled:
+            log.info("상장 여부 보완: %d개사", backfilled)
     refresh_inbox()
 
 

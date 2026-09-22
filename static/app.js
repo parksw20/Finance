@@ -137,21 +137,31 @@ function renderSector() {
 /* ================= 스크리너 ================= */
 const COLSETS = {
   pl: (y) => [
-    { g: `매출`, cols: [[`${y - 1}`, 'revenue_prev', fmtN], [`${y}`, 'revenue', fmtN], ['성장률', 'revenue_growth', (v) => fmtP(v, 1, true)]] },
-    { g: `매출원가`, cols: [[`${y}`, 'cogs', fmtN], ['원가율', 'cogs_ratio', fmtP], ['증감', 'cogs_ratio_delta', fmtPp]] },
-    { g: `판관비`, cols: [[`${y}`, 'sga', fmtN], ['판관비율', 'sga_ratio', fmtP], ['증감', 'sga_ratio_delta', fmtPp]] },
-    { g: `영업이익`, cols: [[`${y - 1}`, 'op_prev', fmtN], [`${y}`, 'op', fmtN], ['증감액', 'op_change', fmtN], ['이익률', 'opm', fmtP], ['증감', 'opm_delta', fmtPp]] },
-    { g: `당기순이익`, cols: [[`${y}`, 'net', fmtN], ['순이익률', 'net_margin', fmtP]] },
+    { g: '매출', cols: [[`${y - 1}`, 'revenue_prev', fmtN], [`${y}`, 'revenue', fmtN], ['성장률', 'revenue_growth', (v) => fmtP(v, 1, true)]] },
+    { g: '매출원가율', cols: [[`${y}`, 'cogs_ratio', fmtP], ['증감', 'cogs_ratio_delta', fmtPp]] },
+    { g: '판관비율', cols: [[`${y}`, 'sga_ratio', fmtP], ['증감', 'sga_ratio_delta', fmtPp]] },
+    { g: '영업이익', cols: [[`${y - 1}`, 'op_prev', fmtN], [`${y}`, 'op', fmtN], ['이익률', 'opm', fmtP], ['증감', 'opm_delta', fmtPp]] },
+    { g: '순이익', cols: [['순이익률', 'net_margin', fmtP]] },
   ],
-  sga: (y) => [{ g: `판관비 (매출 대비 비율, ${y})`, cols: SGA.map((k) => [k.replace(/^.\s?/, ''), 'sga_' + k, fmtP]) }, { g: '합계', cols: [['판관비율', 'sga_ratio', fmtP], ['총비용률', 'total_cost_ratio', fmtP]] }],
+  amt: (y) => [
+    { g: '매출', cols: [[`${y - 1}`, 'revenue_prev', fmtN], [`${y}`, 'revenue', fmtN]] },
+    { g: '매출원가', cols: [[`${y - 1}`, 'cogs_prev', fmtN], [`${y}`, 'cogs', fmtN]] },
+    { g: '매출총이익', cols: [[`${y - 1}`, 'gross_prev', fmtN], [`${y}`, 'gross', fmtN]] },
+    { g: '판관비', cols: [[`${y - 1}`, 'sga_prev', fmtN], [`${y}`, 'sga', fmtN]] },
+    { g: '영업이익', cols: [[`${y - 1}`, 'op_prev', fmtN], [`${y}`, 'op', fmtN], ['증감액', 'op_change', fmtN]] },
+    { g: '당기순이익', cols: [[`${y - 1}`, 'net_prev', fmtN], [`${y}`, 'net', fmtN]] },
+  ],
+  sga: (y) => [{ g: `판관비 항목별 매출 대비 비율 (${y})`, cols: SGA.map((k) => [k.replace(/^.\s?/, ''), 'sga_' + k, fmtP]) }, { g: '합계', cols: [['판관비율', 'sga_ratio', fmtP], ['총비용률', 'total_cost_ratio', fmtP]] }],
   bs: (y) => [
-    { g: '재무상태', cols: [['자산총계', 'assets', fmtN], ['부채총계', 'liabilities', fmtN], ['자본총계', 'equity', fmtN], ['부채비율', 'debt_ratio', (v) => fmtP(v, 0)]] },
+    { g: `재무상태 (${y})`, cols: [['자산총계', 'assets', fmtN], ['부채총계', 'liabilities', fmtN], ['자본총계', 'equity', fmtN], ['부채비율', 'debt_ratio', (v) => fmtP(v, 0)], ['리스부채', 'lease_liab', fmtN], ['사용권자산', 'rou_asset', fmtN]] },
     { g: '재고', cols: [['재고자산', 'inventory', fmtN], ['회전율', 'inventory_turnover', (v) => fmtN(v, 1)], ['보유일수', 'inventory_days', fmtN]] },
-    { g: '운전자본', cols: [['순운전자본+', 'nwc_plus', fmtN], ['순운전자본−', 'nwc_minus', fmtN], ['순가용현금', 'net_cash', fmtN]] },
-    { g: '리스', cols: [['사용권자산', 'rou_asset', fmtN], ['리스부채', 'lease_liab', fmtN]] },
-    { g: '현금흐름', cols: [['영업', 'cf_op', fmtN], ['투자', 'cf_inv', fmtN], ['재무', 'cf_fin', fmtN]] },
+  ],
+  cash: (y) => [
+    { g: `운전자본 (${y})`, cols: [['순운전자본+', 'nwc_plus', fmtN], ['순운전자본−', 'nwc_minus', fmtN], ['순가용현금', 'net_cash', fmtN], ['전년 순가용현금', 'net_cash_prev', fmtN]] },
+    { g: '현금흐름', cols: [['영업', 'cf_op', fmtN], ['투자', 'cf_inv', fmtN], ['재무', 'cf_fin', fmtN], ['현금 증감', 'cf_net', fmtN]] },
   ],
 };
+const ratingsCompact = (m) => `<span class="rating-compact">${badge(m.rating_growth)}${badge(m.rating_profit)}${badge(m.rating_stability)}</span>`;
 function enrich(r) {
   r.cogs_ratio_delta = r.cogs_ratio != null && r.cogs_ratio_prev != null ? r.cogs_ratio - r.cogs_ratio_prev : null;
   r.sga_ratio_delta = r.sga_ratio != null && r.sga_ratio_prev != null ? r.sga_ratio - r.sga_ratio_prev : null;
@@ -203,10 +213,10 @@ function renderScreener() {
   enrich(agg); Object.assign(agg, ratingsOf(agg));
   const th = (label, k, extra = '') => `<th class="sortable ${key === k ? 'sorted' + (dir > 0 ? ' asc' : '') : ''} ${extra}" data-k="${k}">${label}</th>`;
   const th2 = (label, k, extra = '') => th(label, k, extra).replace('<th ', '<th rowspan="2" ');
-  const head1 = `<tr><th rowspan="2">#</th>${th2('기업명', 'name', 'l')}${th2('업종', 'sector', 'l')}<th rowspan="2" class="l">설명</th><th rowspan="2" class="l">간략 평가</th>${groups.map((g) => `<th class="group" colspan="${g.cols.length}">${g.g}</th>`).join('')}</tr>`;
+  const head1 = `<tr><th rowspan="2">#</th>${th2('기업명', 'name', 'l')}${th2('업종', 'sector', 'l')}<th rowspan="2" class="l" title="성장성 · 수익성 · 안정성">평가 <span class="muted">성장·수익·안정</span></th>${groups.map((g) => `<th class="group" colspan="${g.cols.length}">${g.g}</th>`).join('')}</tr>`;
   const head2 = `<tr>${groups.map((g) => g.cols.map((c, i) => th(c[0], c[1], i === 0 ? 'group-start' : '')).join('')).join('')}</tr>`;
-  const row = (r, i, cls = '') => `<tr class="${cls || 'clickable'}" data-id="${r.id ?? ''}"><td>${i}</td><td class="l name">${esc(r.name)}${cls ? '' : listedChip(r)}</td><td class="l">${esc(r.sector || '')}</td><td class="l muted">${esc(r.description || r.category || '')}</td><td class="l">${ratings(r)}</td>${groups.map((g) => g.cols.map((c, j) => `<td class="${j === 0 ? 'group-start' : ''}">${c[2](r[c[1]])}</td>`).join('')).join('')}</tr>`;
-  $('#tbl-screener').innerHTML = `<thead>${head1}${head2}</thead><tbody>${row({ ...agg, sector: '', description: `${rows.length}개사` }, '', 'total')}${rows.map((r, i) => row(r, i + 1)).join('')}</tbody>`;
+  const row = (r, i, cls = '') => `<tr class="${cls || 'clickable'}" data-id="${r.id ?? ''}"><td>${i}</td><td class="l name">${esc(r.name)}${cls ? '' : listedChip(r)}${(r.description || (r.category && r.category !== r.sector)) ? `<div class="sub-text">${esc(r.description || r.category)}</div>` : ''}</td><td class="l">${esc(r.sector || '')}</td><td class="l">${ratingsCompact(r)}</td>${groups.map((g) => g.cols.map((c, j) => `<td class="${j === 0 ? 'group-start' : ''}">${c[2](r[c[1]])}</td>`).join('')).join('')}</tr>`;
+  $('#tbl-screener').innerHTML = `<thead>${head1}${head2}</thead><tbody>${row({ ...agg, sector: `${rows.length}개사`, description: '' }, '', 'total')}${rows.map((r, i) => row(r, i + 1)).join('')}</tbody>`;
   $$('#tbl-screener th.sortable').forEach((t) => t.onclick = () => { const k = t.dataset.k; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === 'name' || k === 'sector' ? 1 : -1) }; renderScreener(); });
   $$('#tbl-screener tr.clickable').forEach((tr) => tr.onclick = () => openCompany(+tr.dataset.id));
   $$('#tbl-screener tr.clickable').forEach((tr) => { tr.querySelectorAll('.name').forEach((td) => td.title = '기업분석 보기'); });

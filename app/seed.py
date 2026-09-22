@@ -31,3 +31,21 @@ def load_seed():
             facts[(r["company"], r["category"], r["item"], int(r["fiscal_year"]))] = float(r["amount"])
     n = write_to_db(companies, account_map, facts, source="seed")
     return {"companies": len(companies), "account_map": len(account_map), "facts": n}
+
+
+def backfill_listed():
+    """이미 적재된 DB 에서 listed 가 비어 있는 기업을 seed CSV 값으로 채움 (구버전 DB 마이그레이션용)."""
+    comp_f = SEED_DIR / "companies.csv"
+    if not comp_f.exists():
+        return 0
+    from .db import get_conn
+
+    with open(comp_f, encoding="utf-8", newline="") as f:
+        seed = {r["name"]: r.get("listed") for r in csv.DictReader(f) if r.get("listed") not in (None, "")}
+    n = 0
+    with get_conn() as conn:
+        for row in conn.execute("SELECT id, name FROM companies WHERE listed IS NULL").fetchall():
+            if row["name"] in seed:
+                conn.execute("UPDATE companies SET listed=? WHERE id=?", (int(seed[row["name"]]), row["id"]))
+                n += 1
+    return n
