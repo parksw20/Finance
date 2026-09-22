@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import categories as C
@@ -46,6 +46,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Finance Dashboard", lifespan=lifespan)
+
+# 정적 파일 버전 (파일 수정 시각 기반) → index.html 에서 ?v= 로 붙여 브라우저 캐시 무효화
+ASSET_VERSION = str(int(max((STATIC_DIR / f).stat().st_mtime for f in ("app.js", "style.css", "index.html"))))
+
+
+@app.middleware("http")
+async def no_cache_static(request, call_next):
+    resp = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return resp
 
 
 def _year(conn, year):
@@ -291,4 +302,6 @@ def favicon():
 
 @app.get("/")
 def index():
-    return FileResponse(str(STATIC_DIR / "index.html"))
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    html = html.replace("/static/style.css", f"/static/style.css?v={ASSET_VERSION}").replace("/static/app.js", f"/static/app.js?v={ASSET_VERSION}")
+    return HTMLResponse(html)
