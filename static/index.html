@@ -70,10 +70,9 @@
   <section class="view" id="view-company">
     <div class="card">
       <div class="filters">
-        <input list="company-list" id="c-search" placeholder="기업명 입력 후 선택" style="width:220px">
-        <datalist id="company-list"></datalist>
+        <div class="ac"><input type="search" id="c-search" placeholder="기업명 입력 후 선택" style="width:220px" autocomplete="off"></div>
         <span class="note">비교 기업(최대 3):</span>
-        <input list="company-list" id="c-peer-input" placeholder="기업명 추가" style="width:160px">
+        <div class="ac"><input type="search" id="c-peer-input" placeholder="기업명 추가" style="width:180px" autocomplete="off"></div>
         <div class="chip-group" id="c-peers"></div>
       </div>
     </div>

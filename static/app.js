@@ -217,12 +217,49 @@ function ratingsOf(m) {
 }
 
 /* ================= 기업분석 ================= */
+/** 입력창 아래에 붙는 자동완성 드롭다운. items: 스크리너 기업 목록, onPick(company) */
+function makeAutocomplete(input, getItems, onPick) {
+  const wrap = input.parentElement;
+  const list = document.createElement('div'); list.className = 'ac-list'; wrap.appendChild(list);
+  let active = -1, matches = [];
+  const hl = (name, q) => { const i = name.toLowerCase().indexOf(q); return i < 0 || !q ? esc(name) : esc(name.slice(0, i)) + '<b>' + esc(name.slice(i, i + q.length)) + '</b>' + esc(name.slice(i + q.length)); };
+  const render = () => {
+    const q = input.value.trim().toLowerCase();
+    const items = getItems();
+    matches = items.filter((c) => !q || c.name.toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q) || (c.sector || '').toLowerCase().includes(q) || (c.category || '').toLowerCase().includes(q));
+    if (q) matches.sort((a, b) => (b.name.toLowerCase().startsWith(q) - a.name.toLowerCase().startsWith(q)) || (b.revenue || 0) - (a.revenue || 0));
+    matches = matches.slice(0, 40);
+    active = matches.length ? 0 : -1;
+    list.innerHTML = matches.length ? matches.map((c, i) => `<div class="ac-item ${i === active ? 'active' : ''}" data-i="${i}"><span class="nm">${hl(c.name, q)}</span>${listedChip(c)}<span class="sec">${esc(c.sector || '')}</span>${c.description ? `<span class="desc">${esc(c.description)}</span>` : ''}</div>`).join('') : '<div class="ac-empty">검색 결과 없음</div>';
+    list.classList.add('open');
+  };
+  const close = () => { list.classList.remove('open'); active = -1; };
+  const pick = (i) => { const c = matches[i]; if (!c) return; close(); onPick(c); };
+  input.addEventListener('focus', render);
+  input.addEventListener('input', render);
+  input.addEventListener('keydown', (e) => {
+    if (!list.classList.contains('open')) { if (e.key === 'ArrowDown') render(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault(); if (!matches.length) return;
+      active = (active + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length;
+      $$('.ac-item', list).forEach((el, i) => el.classList.toggle('active', i === active));
+      $$('.ac-item', list)[active]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') { e.preventDefault(); pick(active); }
+    else if (e.key === 'Escape') { close(); input.blur(); }
+  });
+  list.addEventListener('mousedown', (e) => { const it = e.target.closest('.ac-item'); if (it) { e.preventDefault(); pick(+it.dataset.i); } });
+  input.addEventListener('blur', () => setTimeout(close, 120));
+  document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) close(); });
+}
+
 function bindCompany() {
-  const list = state.screener.companies.map((c) => `<option value="${esc(c.name)}">${esc(c.sector || '')}${c.description ? ' · ' + esc(c.description) : ''}</option>`).join('');
-  $('#company-list').innerHTML = list;
-  const byName = (n) => state.screener.companies.find((c) => c.name === n);
-  $('#c-search').onchange = (e) => { const c = byName(e.target.value); if (c) openCompany(c.id); };
-  $('#c-peer-input').onchange = (e) => { const c = byName(e.target.value); e.target.value = ''; if (c && !state.peers.includes(c.id) && state.peers.length < 3 && c.id !== state.company?.id) { state.peers.push(c.id); renderPeerChips(); if (state.company) loadCompany(state.company.id); } };
+  const items = () => state.screener.companies;
+  makeAutocomplete($('#c-search'), items, (c) => { $('#c-search').value = c.name; openCompany(c.id); });
+  makeAutocomplete($('#c-peer-input'), () => items().filter((x) => x.id !== state.company?.id && !state.peers.includes(x.id)), (c) => {
+    $('#c-peer-input').value = '';
+    if (state.peers.length >= 3) return;
+    state.peers.push(c.id); renderPeerChips(); if (state.company) loadCompany(state.company.id);
+  });
   const h = location.hash.match(/company\/(\d+)/); if (h) openCompany(+h[1]);
 }
 function renderPeerChips() {
