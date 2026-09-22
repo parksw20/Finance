@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>재무 대시보드</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/vendor/chart.umd.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">재무 대시보드<small id="unit-note">단위: 억원</small></div>
+    <nav class="tabs" id="tabs">
+      <button data-view="sector" class="active">업종</button>
+      <button data-view="screener">스크리너</button>
+      <button data-view="company">기업분석</button>
+      <button data-view="data">데이터</button>
+    </nav>
+    <div class="top-right">
+      <span class="refresh-info" id="refresh-info"><span class="status-dot"></span>로딩 중</span>
+      <select id="year-select" title="기준 연도"></select>
+      <button id="theme-btn" title="테마 전환">◐</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ===== 업종 ===== -->
+  <section class="view active" id="view-sector">
+    <div class="grid kpi" id="sector-kpi"></div>
+    <div class="grid two mt">
+      <div class="card"><h3>업종별 매출 성장률<small>당해 vs 전년</small></h3><div class="chart-box"><canvas id="ch-sector-growth"></canvas></div></div>
+      <div class="card"><h3>업종별 영업이익률</h3><div class="chart-box"><canvas id="ch-sector-opm"></canvas></div></div>
+    </div>
+    <div class="card mt">
+      <h3>업종 요약<small>업종합계대상(O) 기업 합산 · 행 클릭 시 스크리너로 이동</small></h3>
+      <div class="table-wrap"><table id="tbl-sector"></table></div>
+    </div>
+    <div class="grid two mt">
+      <div class="card"><h3>업종별 판관비 구조<small>매출 대비 비율</small></h3><div class="chart-box tall"><canvas id="ch-sector-sga"></canvas></div></div>
+      <div class="card"><h3>업종별 부채비율<small>(부채총계 − 리스부채) / 자본총계</small></h3><div class="chart-box tall"><canvas id="ch-sector-debt"></canvas></div></div>
+    </div>
+    <div class="grid three mt" id="rankings"></div>
+  </section>
+
+  <!-- ===== 스크리너 ===== -->
+  <section class="view" id="view-screener">
+    <div class="card">
+      <div class="filters" id="screener-filters">
+        <input type="search" id="f-search" placeholder="기업명 검색" style="width:160px">
+        <div class="chip-group" id="f-sector"></div>
+        <select id="f-size"><option value="">매출규모 전체</option></select>
+        <select id="f-growth"><option value="">성장 전체</option><option value="g">성장</option><option value="d">역성장</option></select>
+        <select id="f-profit"><option value="">손익 전체</option><option value="p">흑자</option><option value="l">적자</option></select>
+        <select id="f-rating"><option value="">간략평가 전체</option><option value="growth:Good">성장성 Good</option><option value="profit:Good">수익성 Good</option><option value="stability:Good">안정성 Good</option><option value="growth:Bad">성장성 Bad</option><option value="profit:Bad">수익성 Bad</option><option value="stability:Bad">안정성 Bad</option></select>
+        <select id="f-cols"><option value="pl">손익 지표</option><option value="sga">판관비 구조</option><option value="bs">재무상태·현금</option></select>
+        <label class="chip"><input type="checkbox" id="f-include" checked style="margin:0 4px 0 0;vertical-align:-2px">업종합계대상만</label>
+        <button class="btn" id="f-reset">초기화</button>
+        <span class="count" id="screener-count"></span>
+      </div>
+    </div>
+    <div class="card mt">
+      <div class="table-wrap" style="max-height:70vh"><table id="tbl-screener"></table></div>
+    </div>
+  </section>
+
+  <!-- ===== 기업분석 ===== -->
+  <section class="view" id="view-company">
+    <div class="card">
+      <div class="filters">
+        <input list="company-list" id="c-search" placeholder="기업명 입력 후 선택" style="width:220px">
+        <datalist id="company-list"></datalist>
+        <span class="note">비교 기업(최대 3):</span>
+        <input list="company-list" id="c-peer-input" placeholder="기업명 추가" style="width:160px">
+        <div class="chip-group" id="c-peers"></div>
+      </div>
+    </div>
+    <div id="company-body" class="mt"><div class="empty">기업을 선택하세요</div></div>
+  </section>
+
+  <!-- ===== 데이터 ===== -->
+  <section class="view" id="view-data">
+    <div class="grid two">
+      <div class="card">
+        <h3>갱신 상태</h3>
+        <div id="data-status"></div>
+        <div class="filters mt">
+          <button class="btn primary" id="btn-refresh-all">지금 갱신 (전체)</button>
+          <button class="btn" id="btn-refresh-inbox">엑셀 inbox만</button>
+          <button class="btn" id="btn-refresh-dart">DART만</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>엑셀 업로드<small>참고 워크북과 같은 양식(raw / 정보입력 시트)</small></h3>
+        <form id="upload-form" class="filters">
+          <input type="file" id="upload-file" accept=".xlsm,.xlsx">
+          <button class="btn primary" type="submit">업로드 &amp; 임포트</button>
+          <span class="note" id="upload-result"></span>
+        </form>
+        <ul class="help-list mt">
+          <li>업로드된 파일은 <code>data/inbox/</code>에 저장되고, 이후 스케줄 갱신 시 변경분이 자동 반영됩니다.</li>
+          <li>DART 갱신은 <code>.env</code>의 <code>DART_API_KEY</code>가 설정된 경우 상장사 손익·재무상태·현금흐름 총계를 가져옵니다. 판관비 세부 항목은 엑셀 입력값이 유지됩니다.</li>
+          <li>스케줄은 <code>REFRESH_SCHEDULE</code>(cron 5필드)로 설정합니다. CLI: <code>python -m app.refresh</code></li>
+        </ul>
+      </div>
+    </div>
+    <div class="card mt">
+      <h3>갱신 이력</h3>
+      <div class="table-wrap"><table id="tbl-log"></table></div>
+    </div>
+    <div class="card mt">
+      <h3>임포트된 파일</h3>
+      <div class="table-wrap"><table id="tbl-files"></table></div>
+    </div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
