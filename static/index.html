@@ -53,6 +53,7 @@
         <select id="f-size"><option value="">매출규모 전체</option></select>
         <select id="f-growth"><option value="">성장 전체</option><option value="g">성장</option><option value="d">역성장</option></select>
         <select id="f-profit"><option value="">손익 전체</option><option value="p">흑자</option><option value="l">적자</option></select>
+        <select id="f-listed"><option value="">상장 전체</option><option value="1">상장사</option><option value="0">비상장사</option></select>
         <select id="f-rating"><option value="">간략평가 전체</option><option value="growth:Good">성장성 Good</option><option value="profit:Good">수익성 Good</option><option value="stability:Good">안정성 Good</option><option value="growth:Bad">성장성 Bad</option><option value="profit:Bad">수익성 Bad</option><option value="stability:Bad">안정성 Bad</option></select>
         <select id="f-cols"><option value="pl">손익 지표</option><option value="sga">판관비 구조</option><option value="bs">재무상태·현금</option></select>
         <label class="chip"><input type="checkbox" id="f-include" checked style="margin:0 4px 0 0;vertical-align:-2px">업종합계대상만</label>
@@ -104,6 +105,22 @@
           <li>스케줄은 <code>REFRESH_SCHEDULE</code>(cron 5필드)로 설정합니다. CLI: <code>python -m app.refresh</code></li>
         </ul>
       </div>
+    </div>
+    <div class="card mt">
+      <h3>상장 / 비상장 구분과 DART 데이터 범위</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th class="l">구분</th><th class="l">연간</th><th class="l">분기</th><th class="l">이 대시보드에서</th></tr></thead>
+        <tbody>
+          <tr><td class="l"><span class="chip sm listed">상장</span> 상장사</td><td class="l">사업보고서 · API 제공</td><td class="l">분기·반기보고서 · API 제공</td><td class="l">DART 갱신으로 손익·재무상태·현금흐름 총계 자동 갱신</td></tr>
+          <tr><td class="l">사업보고서 제출 비상장사 (대형)</td><td class="l">사업보고서 · API 제공</td><td class="l">분기·반기보고서 · API 제공</td><td class="l">위와 동일 (DART 기업코드가 매핑되면 자동)</td></tr>
+          <tr><td class="l"><span class="chip sm unlisted">비상장</span> 일반 비상장사</td><td class="l">감사보고서 · 공시 원문만</td><td class="l">없음</td><td class="l">API 미제공 → 엑셀(raw 시트) 입력값 유지. 갱신 이력에 "건너뜀"으로 표시</td></tr>
+        </tbody>
+      </table></div>
+      <ul class="help-list mt">
+        <li>판관비 세부 항목(인건비·광고선전비 등)은 주석 데이터라 상장사도 API로 제공되지 않습니다. 모든 기업의 판관비 세부는 엑셀 입력값을 씁니다.</li>
+        <li>상장 여부는 초기 데이터에 수동 입력된 값이며, DART 갱신 시 DART 종목코드 유무로 자동 확정됩니다. 엑셀 정보입력 시트에 <code>상장</code> 컬럼(O/X)을 두면 그 값을 우선합니다.</li>
+        <li>스크리너의 "상장 전체" 필터와 기업명 옆 배지로 구분할 수 있습니다.</li>
+      </ul>
     </div>
     <div class="card mt">
       <h3>갱신 이력</h3>

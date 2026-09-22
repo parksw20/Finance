@@ -69,6 +69,9 @@ def refresh_inbox(manual=False):
 def refresh_dart(year=None, company_ids=None):
     """DART 에서 상장사 재무제표 갱신."""
     if not DART_API_KEY:
+        with get_conn() as conn:
+            log_id = _log_start(conn, "dart")
+            _log_end(conn, log_id, "skipped", 0, "DART_API_KEY 미설정 → 건너뜀 (.env 또는 키체인에 키를 넣고 서버를 재시작하세요)")
         return {"skipped": "DART_API_KEY 미설정"}
     with get_conn() as conn:
         log_id = _log_start(conn, "dart")
@@ -90,7 +93,10 @@ def refresh_dart(year=None, company_ids=None):
                 rec = dart.resolve_corp(c["name"], codes)
                 if rec:
                     with get_conn() as conn:
-                        conn.execute("UPDATE companies SET corp_code=?, stock_code=? WHERE id=?", (rec["corp_code"], rec["stock_code"] or None, c["id"]))
+                        conn.execute(
+                            "UPDATE companies SET corp_code=?, stock_code=?, listed=? WHERE id=?",
+                            (rec["corp_code"], rec["stock_code"] or None, 1 if rec["stock_code"] else 0, c["id"]),
+                        )
             if not rec:
                 skipped.append({"name": c["name"], "reason": "DART 기업코드 없음"})
                 continue

@@ -63,11 +63,13 @@ def meta():
         last = conn.execute("SELECT * FROM refresh_log ORDER BY id DESC LIMIT 1").fetchone()
         sectors = [r[0] for r in conn.execute("SELECT DISTINCT sector FROM companies WHERE sector IS NOT NULL ORDER BY sector")]
         n_comp = conn.execute("SELECT COUNT(*) FROM companies").fetchone()[0]
+        n_listed = conn.execute("SELECT COUNT(*) FROM companies WHERE listed=1").fetchone()[0]
         return {
             "years": years,
             "default_year": default_year(conn),
             "sectors": sectors,
             "company_count": n_comp,
+            "listed_count": n_listed,
             "sga_items": C.SGA_ITEMS,
             "last_refresh": dict(last) if last else None,
             "schedule": REFRESH_SCHEDULE,
@@ -130,7 +132,7 @@ def screener(year: int | None = None):
 def companies():
     conn = connect()
     try:
-        return [dict(r) for r in conn.execute("SELECT id, name, sector, category, description, include_in_sector, corp_code, stock_code FROM companies ORDER BY sector, name")]
+        return [dict(r) for r in conn.execute("SELECT id, name, sector, category, description, include_in_sector, listed, corp_code, stock_code FROM companies ORDER BY sector, name")]
     finally:
         conn.close()
 
@@ -147,7 +149,7 @@ def company(cid: int, year: int | None = None, peers: str = Query("", descriptio
         years_avail = sorted(amounts.keys())
         cur, prev = amounts.get(y, {}), amounts.get(y - 1, {})
         m = compute_ratios(cur, prev)
-        m.update(id=row["id"], name=row["name"], sector=row["sector"], category=row["category"], description=row["description"])
+        m.update(id=row["id"], name=row["name"], sector=row["sector"], category=row["category"], description=row["description"], listed=(None if row["listed"] is None else bool(row["listed"])), stock_code=row["stock_code"])
         # 손익 표 (계정, 전년, 당해, 성장률, 전년비율, 당해비율, GAP)
         cur_f, prev_f = fill_derived(dict(cur)), fill_derived(dict(prev))
         rev, prev_rev = cur_f.get(C.REVENUE), prev_f.get(C.REVENUE)
@@ -206,11 +208,13 @@ def company(cid: int, year: int | None = None, peers: str = Query("", descriptio
 
 @app.put("/api/company/{cid}")
 def update_company(cid: int, body: dict):
-    allowed = {k: body[k] for k in ("sector", "category", "description", "include_in_sector", "corp_code") if k in body}
+    allowed = {k: body[k] for k in ("sector", "category", "description", "include_in_sector", "corp_code", "listed") if k in body}
     if not allowed:
         raise HTTPException(400, "수정할 필드 없음")
     if "include_in_sector" in allowed:
         allowed["include_in_sector"] = 1 if allowed["include_in_sector"] else 0
+    if "listed" in allowed and allowed["listed"] is not None:
+        allowed["listed"] = 1 if allowed["listed"] else 0
     sets = ", ".join(f"{k}=?" for k in allowed)
     with get_conn() as conn:
         conn.execute(f"UPDATE companies SET {sets} WHERE id=?", (*allowed.values(), cid))

@@ -17,6 +17,7 @@ const fmtP = (v, d = 1, sign = false) => {
 const fmtPp = (v) => (v == null || isNaN(v)) ? '<span class="muted">–</span>' : `<span class="${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}">${v > 0 ? '+' : ''}${(v * 100).toFixed(1)}%p</span>`;
 const badge = (v) => `<span class="badge ${v === '-' || !v ? 'dash' : v}">${v || '-'}</span>`;
 const ratings = (m) => `<div class="rating-row"><span class="lbl">성장성</span>${badge(m.rating_growth)}<span class="lbl">수익성</span>${badge(m.rating_profit)}<span class="lbl">안정성</span>${badge(m.rating_stability)}</div>`;
+const listedChip = (m) => m.listed == null ? '' : ` <span class="chip sm ${m.listed ? 'listed' : 'unlisted'}" title="${m.listed ? (m.stock_code ? '종목코드 ' + m.stock_code : '상장사') : '비상장사 (DART 재무제표 API 미제공)'}">${m.listed ? '상장' : '비상장'}</span>`;
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /* ---------- API ---------- */
@@ -99,7 +100,7 @@ function renderSector() {
     ['전체 영업이익', fmtN(total?.op), `영업이익률 ${fmtP(total?.opm)} (${py}년 ${fmtP(total?.opm_prev)})`],
     ['매출원가율 / 판관비율', `${fmtP(total?.cogs_ratio)} / ${fmtP(total?.sga_ratio)}`, `${py}년 ${fmtP(total?.cogs_ratio_prev)} / ${fmtP(total?.sga_ratio_prev)}`],
     ['부채비율', fmtP(total?.debt_ratio, 0), `리스부채 제외 · ${py}년 ${fmtP(total?.debt_ratio_prev, 0)}`],
-    ['집계 기업 수', `${total?.company_count ?? 0}<span class="muted" style="font-size:14px">개사</span>`, `${sectors.length}개 업종 · 전체 등록 ${state.meta.company_count}개사`],
+    ['집계 기업 수', `${total?.company_count ?? 0}<span class="muted" style="font-size:14px">개사</span>`, `${sectors.length}개 업종 · 등록 ${state.meta.company_count}개사 (상장 ${state.meta.listed_count})`],
   ].map(([t, v, s]) => `<div class="card tile"><h3>${t}</h3><div class="value">${v}</div><div class="sub">${s}</div></div>`).join('');
 
   const labels = sectors.map((s) => s.sector);
@@ -164,11 +165,11 @@ function bindScreener() {
   $('#f-size').innerHTML += sizes.map((s) => `<option>${s}</option>`).join('');
   $('#f-sector').innerHTML = state.meta.sectors.map((s) => `<span class="chip" data-s="${esc(s)}">${esc(s)}</span>`).join('');
   $$('#f-sector .chip').forEach((c) => c.onclick = () => { const s = c.dataset.s; state.filters.sectors.has(s) ? state.filters.sectors.delete(s) : state.filters.sectors.add(s); renderScreener(); });
-  ['#f-search', '#f-size', '#f-growth', '#f-profit', '#f-rating', '#f-cols', '#f-include'].forEach((id) => $(id).oninput = renderScreener);
-  $('#f-reset').onclick = () => { state.filters.sectors.clear(); ['#f-search', '#f-size', '#f-growth', '#f-profit', '#f-rating'].forEach((id) => $(id).value = ''); $('#f-include').checked = true; renderScreener(); };
+  ['#f-search', '#f-size', '#f-growth', '#f-profit', '#f-listed', '#f-rating', '#f-cols', '#f-include'].forEach((id) => $(id).oninput = renderScreener);
+  $('#f-reset').onclick = () => { state.filters.sectors.clear(); ['#f-search', '#f-size', '#f-growth', '#f-profit', '#f-listed', '#f-rating'].forEach((id) => $(id).value = ''); $('#f-include').checked = true; renderScreener(); };
 }
 function filteredCompanies() {
-  const q = $('#f-search').value.trim().toLowerCase(), size = $('#f-size').value, g = $('#f-growth').value, p = $('#f-profit').value, rt = $('#f-rating').value, inc = $('#f-include').checked;
+  const q = $('#f-search').value.trim().toLowerCase(), size = $('#f-size').value, g = $('#f-growth').value, p = $('#f-profit').value, li = $('#f-listed').value, rt = $('#f-rating').value, inc = $('#f-include').checked;
   return state.screener.companies.map(enrich).filter((r) => {
     if (inc && !r.include_in_sector) return false;
     if (q && !(r.name.toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q) || (r.category || '').toLowerCase().includes(q))) return false;
@@ -178,6 +179,7 @@ function filteredCompanies() {
     if (g === 'd' && !(r.revenue_growth < 0)) return false;
     if (p === 'p' && !(r.op > 0)) return false;
     if (p === 'l' && !(r.op < 0)) return false;
+    if (li !== '' && (r.listed == null || Number(r.listed) !== Number(li))) return false;
     if (rt) { const [k, v] = rt.split(':'); if (r['rating_' + k] !== v) return false; }
     return true;
   });
@@ -189,7 +191,7 @@ function renderScreener() {
   const rows = filteredCompanies();
   const { key, dir } = state.sort;
   rows.sort((a, b) => { const va = a[key], vb = b[key]; if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * dir; });
-  $('#screener-count').textContent = `${rows.length}개 기업`;
+  $('#screener-count').textContent = `${rows.length}개 기업 (상장 ${rows.filter((r) => r.listed).length} · 비상장 ${rows.filter((r) => r.listed === false).length})`;
   const groups = COLSETS[$('#f-cols').value](y);
   const sum = (k) => rows.reduce((s, r) => s + (r[k] || 0), 0);
   const agg = { name: `∑ 선택 기업 합계`, revenue: sum('revenue'), revenue_prev: sum('revenue_prev'), cogs: sum('cogs'), cogs_prev: sum('cogs_prev'), sga: sum('sga'), sga_prev: sum('sga_prev'), op: sum('op'), op_prev: sum('op_prev'), net: sum('net'), assets: sum('assets'), liabilities: sum('liabilities'), equity: sum('equity'), inventory: sum('inventory'), inventory_prev: sum('inventory_prev'), nwc_plus: sum('nwc_plus'), nwc_minus: sum('nwc_minus'), rou_asset: sum('rou_asset'), lease_liab: sum('lease_liab'), cf_op: sum('cf_op'), cf_inv: sum('cf_inv'), cf_fin: sum('cf_fin') };
@@ -203,7 +205,7 @@ function renderScreener() {
   const th2 = (label, k, extra = '') => th(label, k, extra).replace('<th ', '<th rowspan="2" ');
   const head1 = `<tr><th rowspan="2">#</th>${th2('기업명', 'name', 'l')}${th2('업종', 'sector', 'l')}<th rowspan="2" class="l">설명</th><th rowspan="2" class="l">간략 평가</th>${groups.map((g) => `<th class="group" colspan="${g.cols.length}">${g.g}</th>`).join('')}</tr>`;
   const head2 = `<tr>${groups.map((g) => g.cols.map((c, i) => th(c[0], c[1], i === 0 ? 'group-start' : '')).join('')).join('')}</tr>`;
-  const row = (r, i, cls = '') => `<tr class="${cls || 'clickable'}" data-id="${r.id ?? ''}"><td>${i}</td><td class="l name">${esc(r.name)}</td><td class="l">${esc(r.sector || '')}</td><td class="l muted">${esc(r.description || r.category || '')}</td><td class="l">${ratings(r)}</td>${groups.map((g) => g.cols.map((c, j) => `<td class="${j === 0 ? 'group-start' : ''}">${c[2](r[c[1]])}</td>`).join('')).join('')}</tr>`;
+  const row = (r, i, cls = '') => `<tr class="${cls || 'clickable'}" data-id="${r.id ?? ''}"><td>${i}</td><td class="l name">${esc(r.name)}${cls ? '' : listedChip(r)}</td><td class="l">${esc(r.sector || '')}</td><td class="l muted">${esc(r.description || r.category || '')}</td><td class="l">${ratings(r)}</td>${groups.map((g) => g.cols.map((c, j) => `<td class="${j === 0 ? 'group-start' : ''}">${c[2](r[c[1]])}</td>`).join('')).join('')}</tr>`;
   $('#tbl-screener').innerHTML = `<thead>${head1}${head2}</thead><tbody>${row({ ...agg, sector: '', description: `${rows.length}개사` }, '', 'total')}${rows.map((r, i) => row(r, i + 1)).join('')}</tbody>`;
   $$('#tbl-screener th.sortable').forEach((t) => t.onclick = () => { const k = t.dataset.k; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === 'name' || k === 'sector' ? 1 : -1) }; renderScreener(); });
   $$('#tbl-screener tr.clickable').forEach((tr) => tr.onclick = () => openCompany(+tr.dataset.id));
@@ -244,7 +246,7 @@ function renderCompany(d) {
   const cols = SERIES();
   const stmt = d.statement;
   const html = `
-  <div class="card"><div class="company-head"><h2>${esc(m.name)}</h2><span class="chip">${esc(m.sector || '')}${m.category && m.category !== m.sector ? ' · ' + esc(m.category) : ''}</span>${m.description ? `<span class="desc">${esc(m.description)}</span>` : ''}<span style="flex:1"></span>${ratings(m)}</div></div>
+  <div class="card"><div class="company-head"><h2>${esc(m.name)}</h2>${listedChip(m)}<span class="chip">${esc(m.sector || '')}${m.category && m.category !== m.sector ? ' · ' + esc(m.category) : ''}</span>${m.description ? `<span class="desc">${esc(m.description)}</span>` : ''}<span style="flex:1"></span>${ratings(m)}</div></div>
   <div class="grid kpi mt">
     ${[['매출액', fmtN(m.revenue), `${py}년 ${fmtN(m.revenue_prev)} · ${fmtP(m.revenue_growth, 1, true)}`], ['영업이익', fmtN(m.op), `이익률 ${fmtP(m.opm)} (${py}년 ${fmtP(m.opm_prev)})`], ['당기순이익', fmtN(m.net), `순이익률 ${fmtP(m.net_margin)}`], ['부채비율', fmtP(m.debt_ratio, 0), `${py}년 ${fmtP(m.debt_ratio_prev, 0)} · 리스부채 제외`], ['재고보유일수', m.inventory_days != null ? fmtN(m.inventory_days) + '<span class="muted" style="font-size:13px">일</span>' : fmtN(null), `회전율 ${fmtN(m.inventory_turnover, 1)}회`], ['순가용현금', fmtN(m.net_cash), `순운전자본+ ${fmtN(m.nwc_plus)} − ${fmtN(m.nwc_minus)}`]].map(([t, v, s]) => `<div class="card tile"><h3>${t}</h3><div class="value">${v}</div><div class="sub">${s}</div></div>`).join('')}
   </div>
@@ -277,10 +279,10 @@ function renderCompany(d) {
   chart('ch-c-trend', { type: 'bar', data: { labels: d.trend.map((t) => t.year + '년'), datasets: [{ label: '매출액', data: d.trend.map((t) => t.revenue), backgroundColor: cols[0], ...barStyle }, { label: '영업이익', data: d.trend.map((t) => t.op), backgroundColor: cols[1], ...barStyle }] },
     options: { scales: { y: { ticks: { callback: (v) => v.toLocaleString() } }, x: { grid: { display: false } } }, plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 10 } }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label} ${fmtN(c.raw)}억`.replace(/<[^>]+>/g, '') } } } } });
 
-  const comp = [{ ...m, _label: m.name }, ...d.peers.map((p) => ({ ...p, _label: p.name })), ...(d.sector_avg ? [{ ...d.sector_avg, _label: `업종 합계 (${d.sector_avg.sector})` }] : []), ...(d.total_avg ? [{ ...d.total_avg, _label: '전체 합계' }] : [])];
+  const comp = [{ ...m, _label: m.name + listedChip(m) }, ...d.peers.map((p) => ({ ...p, _label: p.name + listedChip(p) })), ...(d.sector_avg ? [{ ...d.sector_avg, _label: `업종 합계 (${d.sector_avg.sector})` }] : []), ...(d.total_avg ? [{ ...d.total_avg, _label: '전체 합계' }] : [])];
   const metrics = [['매출액', 'revenue', fmtN], ['매출성장률', 'revenue_growth', (v) => fmtP(v, 1, true)], ['매출원가율', 'cogs_ratio', fmtP], ['판관비율', 'sga_ratio', fmtP], ['영업이익', 'op', fmtN], ['영업이익률', 'opm', fmtP], ['순이익률', 'net_margin', fmtP], ...SGA.map((k) => [k, 'sga_' + k, fmtP]), ['부채비율', 'debt_ratio', (v) => fmtP(v, 0)], ['재고보유일수', 'inventory_days', fmtN], ['순가용현금', 'net_cash', fmtN]];
   comp.forEach(enrich);
-  $('#tbl-compare').innerHTML = `<thead><tr><th class="l">지표</th>${comp.map((c) => `<th>${esc(c._label)}</th>`).join('')}</tr></thead><tbody><tr><td class="l">간략 평가</td>${comp.map((c) => `<td>${ratings(c)}</td>`).join('')}</tr>${metrics.map(([l, k, f]) => `<tr><td class="l">${esc(l)}</td>${comp.map((c) => `<td>${f(c[k])}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  $('#tbl-compare').innerHTML = `<thead><tr><th class="l">지표</th>${comp.map((c) => `<th>${c._label}</th>`).join('')}</tr></thead><tbody><tr><td class="l">간략 평가</td>${comp.map((c) => `<td>${ratings(c)}</td>`).join('')}</tr>${metrics.map(([l, k, f]) => `<tr><td class="l">${esc(l)}</td>${comp.map((c) => `<td>${f(c[k])}</td>`).join('')}</tr>`).join('')}</tbody>`;
   const ck = ['cogs_ratio', 'sga_ratio', 'opm', 'sga_① 인건비', 'sga_④ 광고선전비', 'sga_③ 지급/용역수수료', 'sga_⑦ 물류/운반비'];
   chart('ch-c-compare', { type: 'bar', data: { labels: ['매출원가율', '판관비율', '영업이익률', '인건비율', '광고비율', '수수료율', '물류비율'], datasets: comp.map((c, i) => ({ label: c._label, data: ck.map((k) => c[k]), backgroundColor: cols[i % cols.length], ...barStyle })) },
     options: { scales: { y: { ticks: { callback: pctTick } }, x: { grid: { display: false } } }, plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 10 } }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label} ${(c.raw * 100).toFixed(1)}%` } } } } });

@@ -32,6 +32,18 @@ def _s(v):
     return s or None
 
 
+def _listed(v):
+    """'상장' 컬럼 값 -> 1/0/None. O/Y/상장/코스피/코스닥/1 → 1, X/N/비상장/0 → 0"""
+    t = (_s(v) or "").upper()
+    if not t:
+        return None
+    if t in ("O", "Y", "YES", "1", "TRUE", "상장", "코스피", "코스닥", "KOSPI", "KOSDAQ", "KONEX", "코넥스"):
+        return 1
+    if t in ("X", "N", "NO", "0", "FALSE", "비상장"):
+        return 0
+    return None
+
+
 def parse_workbook(path):
     """워크북을 읽어 (companies, account_map, facts) 반환."""
     import openpyxl
@@ -52,6 +64,7 @@ def parse_workbook(path):
         cat_i = col.get("중분류", 3)
         desc_i = col.get("기업설명", 4)
         inc_i = col.get("업종합계대상", 11)
+        listed_i = col.get("상장") or col.get("상장여부")
         dart_i = col.get("DART")
         map_i = col.get("판관비 항목")
         for r in rows:
@@ -63,6 +76,7 @@ def parse_workbook(path):
                     "category": _s(r[cat_i]) if cat_i < len(r) else None,
                     "description": _s(r[desc_i]) if desc_i < len(r) else None,
                     "include_in_sector": 0 if (_s(r[inc_i]) if inc_i < len(r) else "O") == "X" else 1,
+                    "listed": _listed(r[listed_i]) if listed_i is not None and listed_i < len(r) else None,
                 }
             if dart_i is not None and map_i is not None and dart_i < len(r) and map_i < len(r):
                 src, cat = _s(r[dart_i]), C.normalize(r[map_i])
@@ -115,15 +129,16 @@ def write_to_db(companies, account_map, facts, source="excel", replace_company_f
     with get_conn() as conn:
         for c in companies.values():
             conn.execute(
-                """INSERT INTO companies(name, sector, category, description, include_in_sector, updated_at)
-                   VALUES(?,?,?,?,?,?)
+                """INSERT INTO companies(name, sector, category, description, include_in_sector, listed, updated_at)
+                   VALUES(?,?,?,?,?,?,?)
                    ON CONFLICT(name) DO UPDATE SET
                      sector=COALESCE(excluded.sector, sector),
                      category=COALESCE(excluded.category, category),
                      description=COALESCE(excluded.description, description),
                      include_in_sector=excluded.include_in_sector,
+                     listed=COALESCE(excluded.listed, listed),
                      updated_at=excluded.updated_at""",
-                (c["name"], c["sector"], c["category"], c["description"], c["include_in_sector"], ts),
+                (c["name"], c["sector"], c["category"], c["description"], c["include_in_sector"], c.get("listed"), ts),
             )
         for src, cat in account_map.items():
             conn.execute(

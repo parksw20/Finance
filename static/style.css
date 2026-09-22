@@ -91,6 +91,8 @@ td.group-start, th.group-start { border-left: 1px solid var(--border); }
 .chip { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
 .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .chip.sm { padding: 2px 8px; }
+.chip.listed { background: var(--good-bg); border-color: transparent; color: var(--good); font-size: 10px; padding: 1px 6px; font-weight: 600; vertical-align: 1px; }
+.chip.unlisted { background: var(--neutral-bg); border-color: transparent; color: var(--neutral); font-size: 10px; padding: 1px 6px; font-weight: 600; vertical-align: 1px; }
 .btn { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
 .btn:disabled { opacity: .5; cursor: default; }
@@ -114,7 +116,7 @@ td.group-start, th.group-start { border-left: 1px solid var(--border); }
 .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; background: var(--c); }
 details.sga { margin-top: 6px; } details.sga summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
 .note { color: var(--text-3); font-size: 12px; }
-.log-status { font-weight: 600; } .log-status.ok { color: var(--s3); } .log-status.error { color: var(--bad); } .log-status.running, .log-status.partial { color: var(--s4); }
+.log-status { font-weight: 600; } .log-status.ok { color: var(--s3); } .log-status.error { color: var(--bad); } .log-status.running, .log-status.partial, .log-status.skipped { color: var(--s4); }
 pre.msg { white-space: pre-wrap; margin: 0; font-size: 11px; color: var(--text-2); max-width: 480px; }
 .empty { padding: 40px; text-align: center; color: var(--text-3); }
 .help-list { margin: 0; padding-left: 18px; color: var(--text-2); } .help-list li { margin: 4px 0; }

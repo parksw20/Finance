@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS companies (
     include_in_sector INTEGER NOT NULL DEFAULT 1,
     corp_code TEXT,
     stock_code TEXT,
+    listed INTEGER,
     updated_at TEXT
 );
 CREATE TABLE IF NOT EXISTS account_map (
@@ -69,9 +70,18 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
+MIGRATIONS = [
+    ("companies", "listed", "ALTER TABLE companies ADD COLUMN listed INTEGER"),
+]
+
+
 def init_db():
     with connect() as conn:
         conn.executescript(SCHEMA)
+        for table, col, ddl in MIGRATIONS:
+            cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if col not in cols:
+                conn.execute(ddl)
 
 
 @contextmanager

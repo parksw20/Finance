@@ -18,6 +18,7 @@ def load_seed():
                 "category": r["category"] or None,
                 "description": r["description"] or None,
                 "include_in_sector": int(r["include_in_sector"] or 1),
+                "listed": int(r["listed"]) if r.get("listed") not in (None, "") else None,
             }
     if map_f.exists():
         with open(map_f, encoding="utf-8", newline="") as f:
