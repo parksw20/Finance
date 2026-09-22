@@ -91,8 +91,8 @@ td.group-start, th.group-start { border-left: 1px solid var(--border); }
 .chip { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
 .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .chip.sm { padding: 2px 8px; }
-.chip.listed { background: var(--good-bg); border-color: transparent; color: var(--good); font-size: 10px; padding: 1px 6px; font-weight: 600; vertical-align: 1px; }
-.chip.unlisted { background: var(--neutral-bg); border-color: transparent; color: var(--neutral); font-size: 10px; padding: 1px 6px; font-weight: 600; vertical-align: 1px; }
+.chip.listed { background: var(--good-bg); border-color: transparent; color: var(--good); font-size: 10px; padding: 1px 6px; font-weight: 600; vertical-align: 1px; white-space: nowrap; }
+.chip.unlisted { background: var(--neutral-bg); border-color: transparent; color: var(--neutral); font-size: 10px; padding: 1px 6px; font-weight: 600; vertical-align: 1px; white-space: nowrap; }
 .btn { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
 .btn:disabled { opacity: .5; cursor: default; }

@@ -200,7 +200,7 @@ function renderScreener() {
   $$('#f-sector .chip').forEach((c) => c.classList.toggle('on', state.filters.sectors.has(c.dataset.s)));
   const rows = filteredCompanies();
   const { key, dir } = state.sort;
-  rows.sort((a, b) => { const va = a[key], vb = b[key]; if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * dir; });
+  rows.sort((a, b) => { let va = a[key], vb = b[key]; if (key === 'listed') { va = va == null ? null : +va; vb = vb == null ? null : +vb; } if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * dir; });
   $('#screener-count').textContent = `${rows.length}개 기업 (상장 ${rows.filter((r) => r.listed).length} · 비상장 ${rows.filter((r) => r.listed === false).length})`;
   const groups = COLSETS[$('#f-cols').value](y);
   const sum = (k) => rows.reduce((s, r) => s + (r[k] || 0), 0);
@@ -213,9 +213,9 @@ function renderScreener() {
   enrich(agg); Object.assign(agg, ratingsOf(agg));
   const th = (label, k, extra = '') => `<th class="sortable ${key === k ? 'sorted' + (dir > 0 ? ' asc' : '') : ''} ${extra}" data-k="${k}">${label}</th>`;
   const th2 = (label, k, extra = '') => th(label, k, extra).replace('<th ', '<th rowspan="2" ');
-  const head1 = `<tr><th rowspan="2">#</th>${th2('기업명', 'name', 'l')}${th2('업종', 'sector', 'l')}<th rowspan="2" class="l" title="성장성 · 수익성 · 안정성">평가 <span class="muted">성장·수익·안정</span></th>${groups.map((g) => `<th class="group" colspan="${g.cols.length}">${g.g}</th>`).join('')}</tr>`;
+  const head1 = `<tr><th rowspan="2">#</th>${th2('기업명', 'name', 'l')}${th2('상장', 'listed', 'l')}${th2('업종', 'sector', 'l')}<th rowspan="2" class="l" title="성장성 · 수익성 · 안정성">평가 <span class="muted">성장·수익·안정</span></th>${groups.map((g) => `<th class="group" colspan="${g.cols.length}">${g.g}</th>`).join('')}</tr>`;
   const head2 = `<tr>${groups.map((g) => g.cols.map((c, i) => th(c[0], c[1], i === 0 ? 'group-start' : '')).join('')).join('')}</tr>`;
-  const row = (r, i, cls = '') => `<tr class="${cls || 'clickable'}" data-id="${r.id ?? ''}"><td>${i}</td><td class="l name">${esc(r.name)}${cls ? '' : listedChip(r)}${(r.description || (r.category && r.category !== r.sector)) ? `<div class="sub-text">${esc(r.description || r.category)}</div>` : ''}</td><td class="l">${esc(r.sector || '')}</td><td class="l">${ratingsCompact(r)}</td>${groups.map((g) => g.cols.map((c, j) => `<td class="${j === 0 ? 'group-start' : ''}">${c[2](r[c[1]])}</td>`).join('')).join('')}</tr>`;
+  const row = (r, i, cls = '') => `<tr class="${cls || 'clickable'}" data-id="${r.id ?? ''}"><td>${i}</td><td class="l name">${esc(r.name)}${(r.description || (r.category && r.category !== r.sector)) ? `<div class="sub-text">${esc(r.description || r.category)}</div>` : ''}</td><td class="l">${cls ? '' : listedChip(r)}</td><td class="l">${esc(r.sector || '')}</td><td class="l">${ratingsCompact(r)}</td>${groups.map((g) => g.cols.map((c, j) => `<td class="${j === 0 ? 'group-start' : ''}">${c[2](r[c[1]])}</td>`).join('')).join('')}</tr>`;
   $('#tbl-screener').innerHTML = `<thead>${head1}${head2}</thead><tbody>${row({ ...agg, sector: `${rows.length}개사`, description: '' }, '', 'total')}${rows.map((r, i) => row(r, i + 1)).join('')}</tbody>`;
   $$('#tbl-screener th.sortable').forEach((t) => t.onclick = () => { const k = t.dataset.k; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === 'name' || k === 'sector' ? 1 : -1) }; renderScreener(); });
   $$('#tbl-screener tr.clickable').forEach((tr) => tr.onclick = () => openCompany(+tr.dataset.id));
