@@ -50,3 +50,10 @@ def normalize(name):
         return None
     key = str(name).replace("\xa0", " ").replace(" ", "").strip()
     return _NORMALIZE.get(key)
+
+
+# 기간 구분: FY = 연간, Q1~Q4 = 분기 (Q4 는 연간 − 1~3분기 누적으로 파생)
+PERIODS = ["FY", "Q1", "Q2", "Q3", "Q4"]
+QUARTERS = ["Q1", "Q2", "Q3", "Q4"]
+# 재무상태표 계정 (분기말 잔액이므로 합산/차감하지 않음)
+BALANCE_ITEMS = set(BS_ITEMS)

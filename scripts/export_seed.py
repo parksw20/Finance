@@ -23,9 +23,9 @@ def main(path):
             w.writerow([k, v])
     with open(SEED_DIR / "facts.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["company", "category", "item", "fiscal_year", "amount"])
-        for (name, cat, item, year), amt in sorted(facts.items()):
-            w.writerow([name, cat, item, year, int(amt) if float(amt).is_integer() else amt])
+        w.writerow(["company", "category", "item", "fiscal_year", "period", "amount"])
+        for (name, cat, item, year, period), amt in sorted(facts.items()):
+            w.writerow([name, cat, item, year, period, int(amt) if float(amt).is_integer() else amt])
     print(f"companies={len(companies)} account_map={len(account_map)} facts={len(facts)} -> {SEED_DIR}")
 
 

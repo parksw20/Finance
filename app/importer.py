@@ -12,6 +12,17 @@ from .db import get_conn, now
 warnings.filterwarnings("ignore", module="openpyxl")
 
 YEAR_RE = re.compile(r"(20\d{2})")
+# 헤더 예: 2025년 / 2025 / 2025Q1 / 2025년 1분기 / 2025-Q3
+PERIOD_RE = re.compile(r"^(20\d{2})\s*년?\s*[-_ ]?(?:Q([1-4])|([1-4])\s*분기)?\s*$", re.I)
+
+
+def parse_period_header(h):
+    """헤더 문자열 -> (year, period) 또는 None"""
+    m = PERIOD_RE.match(str(h or "").replace("\xa0", " ").strip())
+    if not m:
+        return None
+    q = m.group(2) or m.group(3)
+    return int(m.group(1)), (f"Q{q}" if q else "FY")
 
 
 def _num(v):
@@ -95,7 +106,7 @@ def parse_workbook(path):
         sector_i = col.get("업종", 1)
         sub_i = col.get("카테고리", 2)
         inc_i = col.get("업종합계대상", 0)
-        year_cols = [(int(YEAR_RE.search(h).group(1)), i) for h, i in col.items() if h and YEAR_RE.fullmatch(h.replace("년", ""))]
+        year_cols = [(parse_period_header(h), i) for h, i in col.items() if parse_period_header(h)]
         for r in rows:
             name = _s(r[name_i]) if name_i < len(r) else None
             cat = C.normalize(r[cat_i]) if cat_i < len(r) else None
@@ -110,11 +121,11 @@ def parse_workbook(path):
                     "include_in_sector": 0 if (_s(r[inc_i]) if inc_i < len(r) else "O") == "X" else 1,
                 }
             item = (_s(r[item_i]) if item_i < len(r) else None) or ""
-            for year, yi in year_cols:
+            for (year, period), yi in year_cols:
                 amt = _num(r[yi]) if yi < len(r) else None
                 if amt is None:
                     continue
-                key = (name, cat, item, year)
+                key = (name, cat, item, year, period)
                 facts[key] = facts.get(key, 0.0) + amt
     wb.close()
     return companies, account_map, facts
@@ -123,8 +134,9 @@ def parse_workbook(path):
 def write_to_db(companies, account_map, facts, source="excel", replace_company_facts=True):
     """파싱 결과를 DB에 반영. 반환: 기록된 fact 수.
 
-    replace_company_facts=True 면 facts 에 등장하는 기업의 기존 데이터를 (소스와 무관하게) 모두 지우고 새로 기록한다.
-    엑셀 원장은 해당 기업의 전체 데이터이므로 오래된 행이 남지 않도록 하기 위함."""
+    facts 키: (기업명, 계정분류, 항목, 연도, 기간). 기간은 'FY' 또는 'Q1'~'Q4'.
+    replace_company_facts=True 면 facts 에 등장하는 (기업, 기간)의 기존 데이터를 소스와 무관하게 모두 지우고 새로 기록한다.
+    엑셀 원장은 해당 기업·기간의 전체 데이터이므로 오래된 행이 남지 않도록 하기 위함. (다른 기간의 데이터, 예: DART 분기값은 유지)"""
     ts = now()
     with get_conn() as conn:
         for c in companies.values():
@@ -147,17 +159,17 @@ def write_to_db(companies, account_map, facts, source="excel", replace_company_f
             )
         ids = {r["name"]: r["id"] for r in conn.execute("SELECT id, name FROM companies")}
         if replace_company_facts:
-            touched = {ids[n] for (n, _, _, _) in facts if n in ids}
-            for cid in touched:
-                conn.execute("DELETE FROM facts WHERE company_id=?", (cid,))
+            touched = {(ids[k[0]], k[4]) for k in facts if k[0] in ids}
+            for cid, period in touched:
+                conn.execute("DELETE FROM facts WHERE company_id=? AND period=?", (cid, period))
         n = 0
-        for (name, cat, item, year), amt in facts.items():
+        for (name, cat, item, year, period), amt in facts.items():
             conn.execute(
-                """INSERT INTO facts(company_id, category, item, fiscal_year, amount, source, updated_at)
-                   VALUES(?,?,?,?,?,?,?)
-                   ON CONFLICT(company_id, category, item, fiscal_year) DO UPDATE SET
+                """INSERT INTO facts(company_id, category, item, fiscal_year, period, amount, source, updated_at)
+                   VALUES(?,?,?,?,?,?,?,?)
+                   ON CONFLICT(company_id, category, item, fiscal_year, period) DO UPDATE SET
                      amount=excluded.amount, source=excluded.source, updated_at=excluded.updated_at""",
-                (ids[name], cat, item, year, amt, source, ts),
+                (ids[name], cat, item, year, period, amt, source, ts),
             )
             n += 1
     return n

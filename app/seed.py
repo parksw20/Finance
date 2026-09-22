@@ -28,7 +28,7 @@ def load_seed():
         for r in csv.DictReader(f):
             if r["company"] not in companies:
                 companies[r["company"]] = {"name": r["company"], "sector": None, "category": None, "description": None, "include_in_sector": 1}
-            facts[(r["company"], r["category"], r["item"], int(r["fiscal_year"]))] = float(r["amount"])
+            facts[(r["company"], r["category"], r["item"], int(r["fiscal_year"]), r.get("period") or "FY")] = float(r["amount"])
     n = write_to_db(companies, account_map, facts, source="seed")
     return {"companies": len(companies), "account_map": len(account_map), "facts": n}
 

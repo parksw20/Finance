@@ -23,17 +23,45 @@ def _growth(cur, prev):
     return cur / prev - 1
 
 
-def load_amounts(conn, company_ids=None):
-    """{company_id: {year: {category: amount(억원)}}}"""
-    sql = "SELECT company_id, category, fiscal_year, SUM(amount) AS amt FROM facts"
+def load_amounts_all(conn, company_ids=None):
+    """{company_id: {period: {year: {category: amount(억원)}}}} — 저장된 기간 그대로 (Q4 파생 전)"""
+    sql = "SELECT company_id, category, fiscal_year, period, SUM(amount) AS amt FROM facts"
     params = ()
     if company_ids:
         sql += " WHERE company_id IN (%s)" % ",".join("?" * len(company_ids))
         params = tuple(company_ids)
-    sql += " GROUP BY company_id, category, fiscal_year"
-    out = defaultdict(lambda: defaultdict(dict))
+    sql += " GROUP BY company_id, category, fiscal_year, period"
+    out = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
     for r in conn.execute(sql, params):
-        out[r["company_id"]][r["fiscal_year"]][r["category"]] = r["amt"] / EOK
+        out[r["company_id"]][r["period"]][r["fiscal_year"]][r["category"]] = r["amt"] / EOK
+    return out
+
+
+def derive_q4(by_period):
+    """Q4 = FY − (Q1+Q2+Q3) (손익·현금흐름 계정). 재무상태 계정은 FY 말 잔액을 그대로 사용."""
+    fy, q1, q2, q3 = (by_period.get(k, {}) for k in ("FY", "Q1", "Q2", "Q3"))
+    out = defaultdict(dict)
+    for year, cats in fy.items():
+        a, b, c = q1.get(year), q2.get(year), q3.get(year)
+        if not (a and b and c):
+            continue
+        for cat, v in cats.items():
+            if cat in C.BALANCE_ITEMS:
+                out[year][cat] = v
+            elif cat in a and cat in b and cat in c:
+                out[year][cat] = v - a[cat] - b[cat] - c[cat]
+    return out
+
+
+def load_amounts(conn, company_ids=None, period="FY"):
+    """{company_id: {year: {category: amount(억원)}}} — 지정 기간 기준. period='Q4' 는 파생값."""
+    allp = load_amounts_all(conn, company_ids)
+    out = {}
+    for cid, by_period in allp.items():
+        if period == "Q4":
+            out[cid] = derive_q4(by_period)
+        else:
+            out[cid] = by_period.get(period, {})
     return out
 
 
@@ -41,7 +69,7 @@ def load_sga_detail(conn, company_id):
     """{year: {category: [(item, amount)]}} 판관비 세부 항목"""
     out = defaultdict(lambda: defaultdict(list))
     for r in conn.execute(
-        "SELECT category, item, fiscal_year, amount FROM facts WHERE company_id=? ORDER BY category, amount DESC",
+        "SELECT category, item, fiscal_year, amount FROM facts WHERE company_id=? AND period='FY' ORDER BY category, amount DESC",
         (company_id,),
     ):
         out[r["fiscal_year"]][r["category"]].append((r["item"], r["amount"] / EOK))
@@ -62,10 +90,11 @@ def fill_derived(y):
     return y
 
 
-def compute_ratios(cur, prev):
-    """당해/전년 계정 dict -> 지표 dict."""
+def compute_ratios(cur, prev, period="FY"):
+    """당해/전년(동기) 계정 dict -> 지표 dict. 분기(period != FY)면 재고회전율은 연환산(×4)."""
     cur = fill_derived(dict(cur))
     prev = fill_derived(dict(prev)) if prev else {}
+    annualize = 1 if period == "FY" else 4
     rev, prev_rev = cur.get(C.REVENUE), prev.get(C.REVENUE)
     inv_cur, inv_prev = cur.get(C.INVENTORY), prev.get(C.INVENTORY)
     avg_inv = None
@@ -73,7 +102,7 @@ def compute_ratios(cur, prev):
         avg_inv = (inv_cur + inv_prev) / 2
     elif inv_cur:
         avg_inv = inv_cur
-    turnover = _div(cur.get(C.COGS), avg_inv)
+    turnover = _div(cur.get(C.COGS) * annualize if cur.get(C.COGS) is not None else None, avg_inv)
     net_cash = None
     if cur.get(C.NWC_PLUS) is not None or cur.get(C.NWC_MINUS) is not None:
         net_cash = (cur.get(C.NWC_PLUS) or 0) - (cur.get(C.NWC_MINUS) or 0)
@@ -163,9 +192,9 @@ def ratings(m):
     return {"rating_growth": growth, "rating_profit": profit, "rating_stability": stab}
 
 
-def company_metrics(conn, year, company_ids=None):
-    """기업별 지표 목록."""
-    amounts = load_amounts(conn, company_ids)
+def company_metrics(conn, year, company_ids=None, period="FY"):
+    """기업별 지표 목록. period 가 분기면 전년 동기 대비."""
+    amounts = load_amounts(conn, company_ids, period)
     rows = []
     q = "SELECT * FROM companies ORDER BY name"
     for c in conn.execute(q):
@@ -175,7 +204,7 @@ def company_metrics(conn, year, company_ids=None):
         cur = yrs.get(year, {})
         if not cur:
             continue
-        m = compute_ratios(cur, yrs.get(year - 1, {}))
+        m = compute_ratios(cur, yrs.get(year - 1, {}), period)
         m.update(
             id=c["id"],
             name=c["name"],
@@ -210,7 +239,7 @@ def size_band(rev_eok):
     return "⑦1조 이상"
 
 
-def aggregate(rows_cur, label):
+def aggregate(rows_cur, label, period="FY"):
     """기업 지표 행들을 합산해 하나의 집계 행(업종/전체)으로."""
     cur = defaultdict(float)
     prev = defaultdict(float)
@@ -223,15 +252,15 @@ def aggregate(rows_cur, label):
         for k, v in r["_prev_raw"].items():
             prev[k] += v
             seen_prev.add(k)
-    m = compute_ratios({k: cur[k] for k in seen_cur}, {k: prev[k] for k in seen_prev})
+    m = compute_ratios({k: cur[k] for k in seen_cur}, {k: prev[k] for k in seen_prev}, period)
     m["name"] = label
     m["company_count"] = len(rows_cur)
     return m
 
 
-def sector_metrics(conn, year):
+def sector_metrics(conn, year, period="FY"):
     """업종별 집계 지표 + 전체 평균."""
-    amounts = load_amounts(conn)
+    amounts = load_amounts(conn, None, period)
     by_sector = defaultdict(list)
     all_rows = []
     for c in conn.execute("SELECT * FROM companies WHERE include_in_sector=1"):
@@ -244,20 +273,39 @@ def sector_metrics(conn, year):
         all_rows.append(row)
     sectors = []
     for name, rows in by_sector.items():
-        m = aggregate(rows, name)
+        m = aggregate(rows, name, period)
         m["sector"] = name
         sectors.append(m)
     sectors.sort(key=lambda s: -(s["revenue"] or 0))
-    total = aggregate(all_rows, "∑ 전체 합계") if all_rows else None
+    total = aggregate(all_rows, "∑ 전체 합계", period) if all_rows else None
     return sectors, total
 
 
 def available_years(conn):
     rows = conn.execute(
-        "SELECT fiscal_year, COUNT(DISTINCT company_id) AS n FROM facts WHERE category=? GROUP BY fiscal_year ORDER BY fiscal_year",
+        "SELECT fiscal_year, COUNT(DISTINCT company_id) AS n FROM facts WHERE category=? AND period='FY' GROUP BY fiscal_year ORDER BY fiscal_year",
         (C.REVENUE,),
     ).fetchall()
     return [{"year": r["fiscal_year"], "companies": r["n"]} for r in rows]
+
+
+def available_periods(conn):
+    """[{year, period, companies}] — 매출액이 있는 (연도, 기간) 목록. Q4 는 FY·Q1~Q3 가 모두 있는 기업 수."""
+    rows = conn.execute(
+        "SELECT fiscal_year, period, COUNT(DISTINCT company_id) AS n FROM facts WHERE category=? GROUP BY fiscal_year, period",
+        (C.REVENUE,),
+    ).fetchall()
+    out = [{"year": r["fiscal_year"], "period": r["period"], "companies": r["n"]} for r in rows]
+    q4 = conn.execute(
+        """SELECT fiscal_year, COUNT(*) AS n FROM (
+             SELECT company_id, fiscal_year FROM facts WHERE category=? AND period IN ('FY','Q1','Q2','Q3')
+             GROUP BY company_id, fiscal_year HAVING COUNT(DISTINCT period)=4) GROUP BY fiscal_year""",
+        (C.REVENUE,),
+    ).fetchall()
+    out += [{"year": r["fiscal_year"], "period": "Q4", "companies": r["n"]} for r in q4]
+    order = {p: i for i, p in enumerate(C.PERIODS)}
+    out.sort(key=lambda x: (x["year"], order.get(x["period"], 9)))
+    return out
 
 
 def default_year(conn):

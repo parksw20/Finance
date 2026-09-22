@@ -28,10 +28,11 @@ CREATE TABLE IF NOT EXISTS facts (
     category TEXT NOT NULL,
     item TEXT NOT NULL DEFAULT '',
     fiscal_year INTEGER NOT NULL,
+    period TEXT NOT NULL DEFAULT 'FY',
     amount REAL NOT NULL,
     source TEXT NOT NULL DEFAULT 'excel',
     updated_at TEXT,
-    UNIQUE(company_id, category, item, fiscal_year)
+    UNIQUE(company_id, category, item, fiscal_year, period)
 );
 CREATE INDEX IF NOT EXISTS idx_facts_company_year ON facts(company_id, fiscal_year);
 CREATE INDEX IF NOT EXISTS idx_facts_category ON facts(category);
@@ -74,6 +75,28 @@ MIGRATIONS = [
     ("companies", "listed", "ALTER TABLE companies ADD COLUMN listed INTEGER"),
 ]
 
+# facts 에 period 컬럼 추가 (유니크 키가 바뀌므로 테이블 재생성)
+FACTS_PERIOD_MIGRATION = """
+CREATE TABLE facts_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    item TEXT NOT NULL DEFAULT '',
+    fiscal_year INTEGER NOT NULL,
+    period TEXT NOT NULL DEFAULT 'FY',
+    amount REAL NOT NULL,
+    source TEXT NOT NULL DEFAULT 'excel',
+    updated_at TEXT,
+    UNIQUE(company_id, category, item, fiscal_year, period)
+);
+INSERT INTO facts_new(id, company_id, category, item, fiscal_year, period, amount, source, updated_at)
+  SELECT id, company_id, category, item, fiscal_year, 'FY', amount, source, updated_at FROM facts;
+DROP TABLE facts;
+ALTER TABLE facts_new RENAME TO facts;
+CREATE INDEX IF NOT EXISTS idx_facts_company_year ON facts(company_id, fiscal_year);
+CREATE INDEX IF NOT EXISTS idx_facts_category ON facts(category);
+"""
+
 
 def init_db():
     with connect() as conn:
@@ -82,6 +105,9 @@ def init_db():
             cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
             if col not in cols:
                 conn.execute(ddl)
+        fcols = {r[1] for r in conn.execute("PRAGMA table_info(facts)")}
+        if "period" not in fcols:
+            conn.executescript(FACTS_PERIOD_MIGRATION)
 
 
 @contextmanager

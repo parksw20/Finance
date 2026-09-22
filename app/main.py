@@ -13,7 +13,7 @@ from . import categories as C
 from . import scheduler
 from .config import DART_API_KEY, INBOX_DIR, REFRESH_ON_START, REFRESH_SCHEDULE, STATIC_DIR
 from .db import get_conn, init_db, connect
-from .metrics import available_years, company_metrics, default_year, fill_derived, load_amounts, load_sga_detail, sector_metrics, compute_ratios
+from .metrics import available_periods, available_years, company_metrics, default_year, derive_q4, fill_derived, load_amounts, load_amounts_all, load_sga_detail, sector_metrics, compute_ratios
 from .refresh import refresh_state, run_refresh, refresh_inbox
 from .seed import load_seed, backfill_listed
 
@@ -59,6 +59,12 @@ def _strip(m):
     return {k: v for k, v in m.items() if not k.startswith("_")}
 
 
+def _period(period):
+    if period not in C.PERIODS:
+        raise HTTPException(400, f"period 는 {C.PERIODS} 중 하나")
+    return period
+
+
 @app.get("/api/meta")
 def meta():
     conn = connect()
@@ -70,6 +76,7 @@ def meta():
         n_listed = conn.execute("SELECT COUNT(*) FROM companies WHERE listed=1").fetchone()[0]
         return {
             "years": years,
+            "periods": available_periods(conn),
             "default_year": default_year(conn),
             "sectors": sectors,
             "company_count": n_comp,
@@ -86,12 +93,13 @@ def meta():
 
 
 @app.get("/api/sectors")
-def sectors(year: int | None = None):
+def sectors(year: int | None = None, period: str = "FY"):
     conn = connect()
     try:
         y = _year(conn, year)
-        secs, total = sector_metrics(conn, y)
-        comps = [r for r in company_metrics(conn, y) if r["include_in_sector"]]
+        p = _period(period)
+        secs, total = sector_metrics(conn, y, p)
+        comps = [r for r in company_metrics(conn, y, None, p) if r["include_in_sector"]]
         rankings = {}
 
         def top(key, n=10, reverse=True, pred=lambda r: True, min_rev=100):
@@ -115,19 +123,20 @@ def sectors(year: int | None = None):
             [{"name": s["sector"], "value": s["revenue_growth"]} for s in secs if s["revenue_growth"] is not None], key=lambda x: -x["value"]
         )
         rankings["sector_opm"] = sorted([{"name": s["sector"], "value": s["opm"]} for s in secs if s["opm"] is not None], key=lambda x: -x["value"])
-        return {"year": y, "sectors": [_strip(s) for s in secs], "total": _strip(total) if total else None, "rankings": rankings}
+        return {"year": y, "period": p, "sectors": [_strip(s) for s in secs], "total": _strip(total) if total else None, "rankings": rankings}
     finally:
         conn.close()
 
 
 @app.get("/api/screener")
-def screener(year: int | None = None):
+def screener(year: int | None = None, period: str = "FY"):
     conn = connect()
     try:
         y = _year(conn, year)
-        rows = company_metrics(conn, y)
+        p = _period(period)
+        rows = company_metrics(conn, y, None, p)
         rows.sort(key=lambda r: -(r["revenue"] or 0))
-        return {"year": y, "companies": [_strip(r) for r in rows]}
+        return {"year": y, "period": p, "companies": [_strip(r) for r in rows]}
     finally:
         conn.close()
 
@@ -142,17 +151,19 @@ def companies():
 
 
 @app.get("/api/company/{cid}")
-def company(cid: int, year: int | None = None, peers: str = Query("", description="비교 기업 id, 콤마 구분")):
+def company(cid: int, year: int | None = None, period: str = "FY", peers: str = Query("", description="비교 기업 id, 콤마 구분")):
     conn = connect()
     try:
         y = _year(conn, year)
+        p = _period(period)
         row = conn.execute("SELECT * FROM companies WHERE id=?", (cid,)).fetchone()
         if not row:
             raise HTTPException(404, "기업 없음")
-        amounts = load_amounts(conn, [cid]).get(cid, {})
+        allp = load_amounts_all(conn, [cid]).get(cid, {})
+        amounts = derive_q4(allp) if p == "Q4" else allp.get(p, {})
         years_avail = sorted(amounts.keys())
         cur, prev = amounts.get(y, {}), amounts.get(y - 1, {})
-        m = compute_ratios(cur, prev)
+        m = compute_ratios(cur, prev, p)
         m.update(id=row["id"], name=row["name"], sector=row["sector"], category=row["category"], description=row["description"], listed=(None if row["listed"] is None else bool(row["listed"])), stock_code=row["stock_code"])
         # 손익 표 (계정, 전년, 당해, 성장률, 전년비율, 당해비율, GAP)
         cur_f, prev_f = fill_derived(dict(cur)), fill_derived(dict(prev))
@@ -184,7 +195,7 @@ def company(cid: int, year: int | None = None, peers: str = Query("", descriptio
             balance.append({"category": label, "prev": a, "cur": b, "growth": (b / a - 1) if a not in (None, 0) and b is not None else None})
         balance.append({"category": "부채비율", "prev": m["debt_ratio_prev"], "cur": m["debt_ratio"], "growth": (m["debt_ratio"] / m["debt_ratio_prev"] - 1) if m["debt_ratio_prev"] and m["debt_ratio"] is not None else None, "is_ratio": True})
         # 판관비 세부
-        detail = load_sga_detail(conn, cid)
+        detail = load_sga_detail(conn, cid) if p == "FY" else {}
         sga_detail = {}
         for cat in C.SGA_ITEMS:
             items = {}
@@ -194,18 +205,29 @@ def company(cid: int, year: int | None = None, peers: str = Query("", descriptio
                 items.setdefault(it, {})["prev"] = amt
             if items:
                 sga_detail[cat] = [{"item": k, **v} for k, v in sorted(items.items(), key=lambda kv: -(kv[1].get("cur") or 0))]
-        # 연도별 추이
+        # 연도별 추이 (연간)
         trend = []
-        for yy in years_avail:
-            f = fill_derived(dict(amounts[yy]))
+        fy = allp.get("FY", {})
+        for yy in sorted(fy.keys()):
+            f = fill_derived(dict(fy[yy]))
             trend.append({"year": yy, "revenue": f.get(C.REVENUE), "op": f.get(C.OP), "net": f.get(C.NET), "opm": (f[C.OP] / f[C.REVENUE]) if f.get(C.REVENUE) and f.get(C.OP) is not None else None})
-        # 업종 평균 & 비교 기업
-        secs, total = sector_metrics(conn, y)
+        # 분기 추이 (Q4 파생 포함)
+        quarterly = []
+        q4 = derive_q4(allp)
+        for yy in sorted({yr for q in C.QUARTERS[:3] for yr in allp.get(q, {})} | set(q4.keys())):
+            for q in C.QUARTERS:
+                src = q4.get(yy) if q == "Q4" else allp.get(q, {}).get(yy)
+                if not src or src.get(C.REVENUE) is None:
+                    continue
+                f = fill_derived(dict(src))
+                quarterly.append({"year": yy, "period": q, "label": f"{yy} {q}", "revenue": f.get(C.REVENUE), "op": f.get(C.OP), "opm": (f[C.OP] / f[C.REVENUE]) if f.get(C.REVENUE) and f.get(C.OP) is not None else None})
+        # 업종 합계 & 비교 기업
+        secs, total = sector_metrics(conn, y, p)
         sector_avg = next((_strip(s) for s in secs if s["sector"] == row["sector"]), None)
-        peer_ids = [int(p) for p in peers.split(",") if p.strip().isdigit() and int(p) != cid][:4]
-        peer_rows = [_strip(r) for r in company_metrics(conn, y, [cid] + peer_ids)] if peer_ids else []
+        peer_ids = [int(x) for x in peers.split(",") if x.strip().isdigit() and int(x) != cid][:4]
+        peer_rows = [_strip(r) for r in company_metrics(conn, y, [cid] + peer_ids, p)] if peer_ids else []
         peer_rows = [r for r in peer_rows if r["id"] != cid]
-        return {"year": y, "years": years_avail, "company": _strip(m), "statement": statement, "balance": balance, "sga_detail": sga_detail, "trend": trend, "sector_avg": sector_avg, "total_avg": _strip(total) if total else None, "peers": peer_rows}
+        return {"year": y, "period": p, "years": years_avail, "company": _strip(m), "statement": statement, "balance": balance, "sga_detail": sga_detail, "trend": trend, "quarterly": quarterly, "sector_avg": sector_avg, "total_avg": _strip(total) if total else None, "peers": peer_rows}
     finally:
         conn.close()
 

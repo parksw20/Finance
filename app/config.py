@@ -43,3 +43,5 @@ def _from_keyring(name):
 DART_API_KEY = os.environ.get("DART_API_KEY", "").strip() or _from_keyring("DART_API_KEY") or ""
 REFRESH_SCHEDULE = os.environ.get("REFRESH_SCHEDULE", "0 6 * * *").strip()
 REFRESH_ON_START = os.environ.get("REFRESH_ON_START", "false").lower() in ("1", "true", "yes")
+# DART 분기보고서(1분기·반기·3분기)도 수집할지. false 면 연간만
+DART_QUARTERLY = os.environ.get("DART_QUARTERLY", "true").lower() in ("1", "true", "yes")

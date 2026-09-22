@@ -90,8 +90,12 @@ def resolve_corp(name, codes):
     return None
 
 
+# 보고서 코드: 11011 사업보고서(연간), 11013 1분기, 11012 반기, 11014 3분기
+REPORT_CODES = {"FY": "11011", "Q1": "11013", "Q2": "11012", "Q3": "11014"}
+
+
 def fetch_statements(corp_code, year, reprt_code="11011"):
-    """연간 사업보고서(11011) 전체 재무제표. 연결(CFS) 우선, 없으면 별도(OFS)."""
+    """사업연도·보고서 코드의 전체 재무제표. 연결(CFS) 우선, 없으면 별도(OFS)."""
     for fs_div in ("CFS", "OFS"):
         r = requests.get(
             f"{BASE}/fnlttSinglAcntAll.json",
@@ -116,10 +120,16 @@ def _amt(v):
         return None
 
 
-def to_facts(rows, year, account_map):
-    """DART 응답 -> {(category, item, year): amount}."""
+def to_facts(rows, year, account_map, period="FY"):
+    """DART 응답 -> {(category, item, year, period): amount}.
+
+    분기 보고서(period Q1~Q3):
+      - 손익(IS/CIS): thstrm_amount = 당기 3개월, frmtrm_amount = 전기 동기 3개월 → 해당 분기값으로 저장
+      - 재무상태(BS): thstrm_amount = 분기말 잔액 저장. frmtrm_amount 는 전기말(연간)이라 저장하지 않음
+      - 현금흐름(CF): 분기 보고서는 누적값만 있어 저장하지 않음 (연간만)
+    """
     facts = {}
-    cf_seen = set()
+    quarterly = period != "FY"
     for row in rows:
         nm = _norm(row.get("account_nm"))
         sj = row.get("sj_div")  # BS / IS / CIS / CF / SCE
@@ -133,11 +143,15 @@ def to_facts(rows, year, account_map):
             continue
         if sj == "CIS" and cat in (C.REVENUE, C.COGS, C.GROSS, C.SGA, C.OP, C.NET) and any(k[0] == cat for k in facts):
             continue  # 손익계산서(IS)가 있으면 포괄손익(CIS) 중복 무시
+        if quarterly and sj == "CF":
+            continue
         cur, prev = _amt(row.get("thstrm_amount")), _amt(row.get("frmtrm_amount"))
+        if quarterly and sj == "BS":
+            prev = None
         for y, a in ((year, cur), (year - 1, prev)):
             if a is None:
                 continue
-            key = (cat, nm, y)
+            key = (cat, nm, y, period)
             if key in facts:
                 continue
             facts[key] = a

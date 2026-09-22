@@ -13,7 +13,7 @@ from pathlib import Path
 
 from . import categories as C
 from . import dart
-from .config import DART_API_KEY, INBOX_DIR
+from .config import DART_API_KEY, DART_QUARTERLY, INBOX_DIR
 from .db import get_conn, now, init_db
 from .importer import import_file, write_to_db
 from .metrics import default_year
@@ -101,32 +101,41 @@ def refresh_dart(year=None, company_ids=None):
                 skipped.append({"name": c["name"], "reason": "DART 기업코드 없음"})
                 continue
             try:
-                fs_div, rows = dart.fetch_statements(rec["corp_code"], year)
-                if not rows:
+                # 수집 대상: (연도, 기간) — 연간은 year, 분기는 year 와 다음 연도(진행 중인 해)
+                targets = [(year, "FY")]
+                if DART_QUARTERLY:
+                    targets += [(y, q) for y in (year, year + 1) for q in ("Q1", "Q2", "Q3")]
+                all_facts = {}
+                fs_used = None
+                for y, period in targets:
+                    fs_div, rows = dart.fetch_statements(rec["corp_code"], y, dart.REPORT_CODES[period])
+                    if not rows:
+                        continue
+                    fs_used = fs_used or fs_div
+                    all_facts.update(dart.to_facts(rows, y, account_map, period))
+                if not all_facts:
                     skipped.append({"name": c["name"], "reason": f"{year}년 사업보고서 없음(비상장 또는 미제출)"})
                     continue
-                facts = dart.to_facts(rows, year, account_map)
-                if not facts:
-                    skipped.append({"name": c["name"], "reason": "매핑 가능한 계정 없음"})
-                    continue
-                # 순운전자본(+/-)은 DART 표준계정이 엑셀 원장보다 거칠므로, 해당 연도에 기존 데이터가 있으면 유지
+                # 순운전자본(+/-)은 DART 표준계정이 엑셀 원장보다 거칠므로, 연간은 기존 데이터가 있으면 유지
                 with get_conn() as conn:
                     has_nwc = {r[0] for r in conn.execute(
-                        "SELECT DISTINCT fiscal_year FROM facts WHERE company_id=? AND category IN (?,?) AND source!='dart'",
+                        "SELECT DISTINCT fiscal_year FROM facts WHERE company_id=? AND category IN (?,?) AND period='FY' AND source!='dart'",
                         (c["id"], C.NWC_PLUS, C.NWC_MINUS))}
-                facts = {k: v for k, v in facts.items() if not (k[0] in dart.NWC_CATEGORIES and k[2] in has_nwc)}
-                keyed = {(c["name"], cat, item, y): a for (cat, item, y), a in facts.items()}
-                # 해당 (기업, 계정분류, 연도)의 기존 항목을 DART 값으로 대체
+                all_facts = {k: v for k, v in all_facts.items() if not (k[0] in dart.NWC_CATEGORIES and k[3] == "FY" and k[2] in has_nwc)}
+                keyed = {(c["name"], cat, item, y, period): a for (cat, item, y, period), a in all_facts.items()}
+                # 해당 (기업, 계정분류, 연도, 기간)의 기존 항목을 DART 값으로 대체
                 with get_conn() as conn:
-                    for (cat, _item, y) in facts:
-                        conn.execute("DELETE FROM facts WHERE company_id=? AND category=? AND fiscal_year=?", (c["id"], cat, y))
+                    for (cat, _item, y, period) in all_facts:
+                        conn.execute("DELETE FROM facts WHERE company_id=? AND category=? AND fiscal_year=? AND period=?", (c["id"], cat, y, period))
                 n = write_to_db({}, {}, keyed, source="dart", replace_company_facts=False)
                 total += n
-                updated.append({"name": c["name"], "fs": fs_div, "facts": n})
+                nq = len({(k[2], k[3]) for k in all_facts if k[3] != "FY"})
+                updated.append({"name": c["name"], "fs": fs_used, "facts": n, "quarters": nq})
             except Exception as e:  # noqa: BLE001
                 errors.append({"name": c["name"], "error": str(e)})
         status = "ok" if not errors else ("partial" if updated else "error")
-        msg = f"갱신 {len(updated)}개, 건너뜀 {len(skipped)}개, 오류 {len(errors)}개 (연도 {year})"
+        nq = sum(u.get("quarters", 0) for u in updated)
+        msg = f"갱신 {len(updated)}개, 건너뜀 {len(skipped)}개, 오류 {len(errors)}개 (연간 {year}년, 분기 데이터 {nq}건)"
     except Exception as e:  # noqa: BLE001
         status, msg = "error", f"{e}"
     with get_conn() as conn:
