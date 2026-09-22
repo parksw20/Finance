@@ -27,6 +27,10 @@ def _log_start(conn, source):
     return cur.lastrowid
 
 
+def _log_progress(conn, log_id, message):
+    conn.execute("UPDATE refresh_log SET message=? WHERE id=?", (message, log_id))
+
+
 def _log_end(conn, log_id, status, rows=0, message=None):
     conn.execute(
         "UPDATE refresh_log SET finished_at=?, status=?, rows_written=?, message=? WHERE id=?",
@@ -85,7 +89,10 @@ def refresh_dart(year=None, company_ids=None):
     total = 0
     try:
         codes = dart.load_corp_codes()
-        for c in companies:
+        for idx, c in enumerate(companies, 1):
+            if idx == 1 or idx % 5 == 0:
+                with get_conn() as conn:
+                    _log_progress(conn, log_id, f"{idx}/{len(companies)} 처리 중 · {c['name']} (갱신 {len(updated)}, 건너뜀 {len(skipped)}, 오류 {len(errors)})")
             rec = None
             if c["corp_code"]:
                 rec = {"corp_code": c["corp_code"], "stock_code": ""}
@@ -146,6 +153,16 @@ def refresh_dart(year=None, company_ids=None):
     with get_conn() as conn:
         _log_end(conn, log_id, status, total, msg)
     return {"year": year, "updated": updated, "skipped": skipped, "errors": errors, "status": status}
+
+
+def close_stale_runs():
+    """서버 재시작 등으로 끝나지 못한 'running' 이력을 interrupted 로 정리."""
+    with get_conn() as conn:
+        n = conn.execute(
+            "UPDATE refresh_log SET status='interrupted', finished_at=?, message=COALESCE(message,'') || ' → 서버 재시작으로 중단됨' WHERE status='running'",
+            (now(),),
+        ).rowcount
+    return n
 
 
 def run_refresh(sources=("inbox", "dart"), year=None):

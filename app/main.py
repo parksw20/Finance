@@ -14,7 +14,7 @@ from . import scheduler
 from .config import DART_API_KEY, INBOX_DIR, REFRESH_ON_START, REFRESH_SCHEDULE, STATIC_DIR
 from .db import get_conn, init_db, connect
 from .metrics import available_periods, available_years, company_metrics, default_year, derive_q4, fill_derived, load_amounts, load_amounts_all, load_sga_detail, sector_metrics, compute_ratios
-from .refresh import refresh_state, run_refresh, refresh_inbox
+from .refresh import close_stale_runs, refresh_state, run_refresh, refresh_inbox
 from .seed import load_seed, backfill_listed
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -23,6 +23,7 @@ log = logging.getLogger("finance")
 
 def bootstrap():
     init_db()
+    close_stale_runs()
     with get_conn() as conn:
         n = conn.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
     if n == 0:
