@@ -94,6 +94,17 @@ def resolve_corp(name, codes):
 REPORT_CODES = {"FY": "11011", "Q1": "11013", "Q2": "11012", "Q3": "11014"}
 
 
+def fetch_company_info(corp_code):
+    """기업개황: 결산월(acc_mt), 종목코드 등. 실패 시 None."""
+    r = requests.get(f"{BASE}/company.json", params={"crtfc_key": _key(), "corp_code": corp_code}, timeout=30)
+    r.raise_for_status()
+    js = r.json()
+    if js.get("status") != "000":
+        return None
+    acc = str(js.get("acc_mt") or "").strip()
+    return {"fiscal_month": int(acc) if acc.isdigit() else None, "stock_code": (js.get("stock_code") or "").strip(), "corp_name": js.get("corp_name")}
+
+
 def fetch_statements(corp_code, year, reprt_code="11011"):
     """사업연도·보고서 코드의 전체 재무제표. 연결(CFS) 우선, 없으면 별도(OFS)."""
     for fs_div in ("CFS", "OFS"):

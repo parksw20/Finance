@@ -22,6 +22,7 @@ const fmtPp = (v) => (v == null || isNaN(v)) ? '<span class="muted">–</span>' 
 const badge = (v) => `<span class="badge ${v === '-' || !v ? 'dash' : v}">${v || '-'}</span>`;
 const ratings = (m) => `<div class="rating-row"><span class="lbl">성장성</span>${badge(m.rating_growth)}<span class="lbl">수익성</span>${badge(m.rating_profit)}<span class="lbl">안정성</span>${badge(m.rating_stability)}</div>`;
 const listedChip = (m) => m.listed == null ? '' : ` <span class="chip sm ${m.listed ? 'listed' : 'unlisted'}" title="${m.listed ? (m.stock_code ? '종목코드 ' + m.stock_code : '상장사') : '비상장사 (DART 재무제표 API 미제공)'}">${m.listed ? '상장' : '비상장'}</span>`;
+const fyChip = (m) => (m.fiscal_month && m.fiscal_month !== 12) ? ` <span class="chip sm fym" title="${m.fiscal_month}월 결산 법인: 연간·분기는 회계연도 기준이라 12월 결산사와 기간이 다릅니다">${m.fiscal_month}월 결산</span>` : '';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /* ---------- API ---------- */
@@ -223,7 +224,7 @@ function renderScreener() {
   const th2 = (label, k, extra = '') => th(label, k, extra).replace('<th ', '<th rowspan="2" ');
   const head1 = `<tr><th rowspan="2">#</th>${th2('기업명', 'name', 'l')}${th2('상장', 'listed', 'l')}${th2('업종', 'sector', 'l')}<th rowspan="2" class="l" title="성장성 · 수익성 · 안정성">평가 <span class="muted">성장·수익·안정</span></th>${groups.map((g) => `<th class="group" colspan="${g.cols.length}">${g.g}</th>`).join('')}</tr>`;
   const head2 = `<tr>${groups.map((g) => g.cols.map((c, i) => th(c[0], c[1], i === 0 ? 'group-start' : '')).join('')).join('')}</tr>`;
-  const row = (r, i, cls = '') => `<tr class="${cls || 'clickable'}" data-id="${r.id ?? ''}"><td>${i}</td><td class="l name">${esc(r.name)}${(r.description || (r.category && r.category !== r.sector)) ? `<div class="sub-text">${esc(r.description || r.category)}</div>` : ''}</td><td class="l">${cls ? '' : listedChip(r)}</td><td class="l">${esc(r.sector || '')}</td><td class="l">${ratingsCompact(r)}</td>${groups.map((g) => g.cols.map((c, j) => `<td class="${j === 0 ? 'group-start' : ''}">${c[2](r[c[1]])}</td>`).join('')).join('')}</tr>`;
+  const row = (r, i, cls = '') => `<tr class="${cls || 'clickable'}" data-id="${r.id ?? ''}"><td>${i}</td><td class="l name">${esc(r.name)}${(r.description || (r.category && r.category !== r.sector)) ? `<div class="sub-text">${esc(r.description || r.category)}</div>` : ''}</td><td class="l">${cls ? '' : listedChip(r) + fyChip(r)}</td><td class="l">${esc(r.sector || '')}</td><td class="l">${ratingsCompact(r)}</td>${groups.map((g) => g.cols.map((c, j) => `<td class="${j === 0 ? 'group-start' : ''}">${c[2](r[c[1]])}</td>`).join('')).join('')}</tr>`;
   $('#tbl-screener').innerHTML = `<thead>${head1}${head2}</thead><tbody>${row({ ...agg, sector: `${rows.length}개사`, description: '' }, '', 'total')}${rows.map((r, i) => row(r, i + 1)).join('')}</tbody>`;
   $$('#tbl-screener th.sortable').forEach((t) => t.onclick = () => { const k = t.dataset.k; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === 'name' || k === 'sector' ? 1 : -1) }; renderScreener(); });
   $$('#tbl-screener tr.clickable').forEach((tr) => tr.onclick = () => openCompany(+tr.dataset.id));
@@ -301,7 +302,7 @@ function renderCompany(d) {
   const cols = SERIES();
   const stmt = d.statement;
   const html = `
-  <div class="card"><div class="company-head"><h2>${esc(m.name)}</h2>${listedChip(m)}<span class="chip">${esc(m.sector || '')}${m.category && m.category !== m.sector ? ' · ' + esc(m.category) : ''}</span>${m.description ? `<span class="desc">${esc(m.description)}</span>` : ''}<span style="flex:1"></span>${ratings(m)}</div></div>
+  <div class="card"><div class="company-head"><h2>${esc(m.name)}</h2>${listedChip(m)}${fyChip(m)}<span class="chip">${esc(m.sector || '')}${m.category && m.category !== m.sector ? ' · ' + esc(m.category) : ''}</span>${m.description ? `<span class="desc">${esc(m.description)}</span>` : ''}<span style="flex:1"></span>${ratings(m)}</div></div>
   <div class="grid kpi mt">
     ${[['매출액', fmtN(m.revenue), `${L(py)} ${fmtN(m.revenue_prev)} · ${fmtP(m.revenue_growth, 1, true)}`], ['영업이익', fmtN(m.op), `이익률 ${fmtP(m.opm)} (${L(py)} ${fmtP(m.opm_prev)})`], ['당기순이익', fmtN(m.net), `순이익률 ${fmtP(m.net_margin)}`], ['부채비율', fmtP(m.debt_ratio, 0), `${L(py)} ${fmtP(m.debt_ratio_prev, 0)} · 리스부채 제외`], ['재고보유일수', m.inventory_days != null ? fmtN(m.inventory_days) + '<span class="muted" style="font-size:13px">일</span>' : fmtN(null), `회전율 ${fmtN(m.inventory_turnover, 1)}회`], ['순가용현금', fmtN(m.net_cash), `순운전자본+ ${fmtN(m.nwc_plus)} − ${fmtN(m.nwc_minus)}`]].map(([t, v, s]) => `<div class="card tile"><h3>${t}</h3><div class="value">${v}</div><div class="sub">${s}</div></div>`).join('')}
   </div>
@@ -367,7 +368,8 @@ async function loadData() {
     <tr><td class="l muted">스케줄</td><td class="l">${s.schedule ? `<code>${esc(s.schedule)}</code> (cron)` : '자동 갱신 꺼짐'}</td></tr>
     <tr><td class="l muted">다음 실행</td><td class="l">${s.next_run ? s.next_run.replace('T', ' ').slice(0, 19) : '–'}</td></tr>
     <tr><td class="l muted">DART 연동</td><td class="l">${s.dart_enabled ? '<span class="pos">사용 (API 키 설정됨)</span>' : '<span class="muted">미설정 – .env 에 DART_API_KEY 입력</span>'}</td></tr>
-    <tr><td class="l muted">기준 기간</td><td class="l">${L(state.year)}</td></tr></tbody></table>`;
+    <tr><td class="l muted">기준 기간</td><td class="l">${L(state.year)}</td></tr>
+    <tr><td class="l muted">12월 외 결산</td><td class="l">${(state.meta.non_december_fy || []).length ? esc(state.meta.non_december_fy.join(', ')) + ' <span class="muted">(회계연도 기준으로 표시됨)</span>' : '<span class="muted">없음 (DART 갱신 후 자동 확인)</span>'}</td></tr></tbody></table>`;
   $('#tbl-log').innerHTML = `<thead><tr><th>#</th><th class="l">소스</th><th class="l">시작</th><th class="l">종료</th><th class="l">상태</th><th>행 수</th><th class="l">메시지</th></tr></thead><tbody>${s.logs.map((l) => `<tr><td>${l.id}</td><td class="l">${esc(l.source)}</td><td class="l">${l.started_at}</td><td class="l">${l.finished_at || ''}</td><td class="l"><span class="log-status ${l.status}">${l.status}</span></td><td>${l.rows_written ?? ''}</td><td class="l"><pre class="msg">${esc(l.message || '')}</pre></td></tr>`).join('') || '<tr><td colspan="7" class="l muted">이력 없음</td></tr>'}</tbody>`;
   $('#tbl-files').innerHTML = `<thead><tr><th class="l">파일</th><th class="l">임포트 시각</th><th>크기</th></tr></thead><tbody>${s.files.map((f) => `<tr><td class="l">${esc(f.path.split('/').pop())}</td><td class="l">${f.imported_at}</td><td>${(f.size / 1024).toFixed(0)} KB</td></tr>`).join('') || '<tr><td colspan="3" class="l muted">data/inbox 에 엑셀 파일을 넣거나 위에서 업로드하세요</td></tr>'}</tbody>`;
   if (s.running && !dataPoll) dataPoll = setInterval(async () => { const st = await api('/api/refresh/status?limit=1'); if (!st.running) { clearInterval(dataPoll); dataPoll = null; await loadMeta(); await loadAll(); await loadData(); } }, 2000);

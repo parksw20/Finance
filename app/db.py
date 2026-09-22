@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS companies (
     corp_code TEXT,
     stock_code TEXT,
     listed INTEGER,
+    fiscal_month INTEGER,
     updated_at TEXT
 );
 CREATE TABLE IF NOT EXISTS account_map (
@@ -73,6 +74,7 @@ def connect() -> sqlite3.Connection:
 
 MIGRATIONS = [
     ("companies", "listed", "ALTER TABLE companies ADD COLUMN listed INTEGER"),
+    ("companies", "fiscal_month", "ALTER TABLE companies ADD COLUMN fiscal_month INTEGER"),
 ]
 
 # facts 에 period 컬럼 추가 (유니크 키가 바뀌므로 테이블 재생성)

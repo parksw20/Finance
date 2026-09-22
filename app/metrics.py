@@ -214,6 +214,7 @@ def company_metrics(conn, year, company_ids=None, period="FY"):
             include_in_sector=bool(c["include_in_sector"]),
             listed=(None if c["listed"] is None else bool(c["listed"])),
             stock_code=c["stock_code"],
+            fiscal_month=c["fiscal_month"],
         )
         m["size_band"] = size_band(m["revenue"])
         rows.append(m)

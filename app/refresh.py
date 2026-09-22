@@ -77,7 +77,7 @@ def refresh_dart(year=None, company_ids=None):
         log_id = _log_start(conn, "dart")
         year = year or default_year(conn)
         account_map = {r["source_name"]: r["category"] for r in conn.execute("SELECT * FROM account_map")}
-        q = "SELECT id, name, corp_code FROM companies"
+        q = "SELECT id, name, corp_code, fiscal_month FROM companies"
         if company_ids:
             q += " WHERE id IN (%s)" % ",".join(str(int(i)) for i in company_ids)
         companies = [dict(r) for r in conn.execute(q)]
@@ -101,6 +101,11 @@ def refresh_dart(year=None, company_ids=None):
                 skipped.append({"name": c["name"], "reason": "DART 기업코드 없음"})
                 continue
             try:
+                if c.get("fiscal_month") is None:
+                    info = dart.fetch_company_info(rec["corp_code"])
+                    if info and info["fiscal_month"]:
+                        with get_conn() as conn:
+                            conn.execute("UPDATE companies SET fiscal_month=? WHERE id=?", (info["fiscal_month"], c["id"]))
                 # 수집 대상: (연도, 기간) — 연간은 year, 분기는 year 와 다음 연도(진행 중인 해)
                 targets = [(year, "FY")]
                 if DART_QUARTERLY:
