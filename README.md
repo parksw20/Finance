@@ -75,6 +75,6 @@ scripts/export_seed.py   워크북 → seed CSV 재생성
 | GET | `/api/screener?year=` | 기업별 지표 |
 | GET | `/api/company/{id}?year=&peers=1,2` | 기업 상세 + 비교 |
 | PUT | `/api/company/{id}` | 업종/설명/집계대상 수정 |
-| POST | `/api/refresh?source=all|inbox|dart` | 갱신 실행(백그라운드) |
+| POST | `/api/refresh?source=all` | 갱신 실행(백그라운드). `source`는 `all` / `inbox` / `dart` 중 하나, `year=` 로 DART 조회 연도 지정 가능 |
 | GET | `/api/refresh/status` | 갱신 상태·이력 |
 | POST | `/api/upload` | 엑셀 업로드 후 즉시 임포트 |
