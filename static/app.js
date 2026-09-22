@@ -211,7 +211,7 @@ function renderScreener() {
 }
 function ratingsOf(m) {
   const g = m.revenue_growth, p = m.opm, d = m.debt_ratio;
-  return { rating_growth: g == null ? '-' : g > 0.2 ? 'Good' : g < 0 ? 'Bad' : 'N', rating_profit: p == null ? '-' : p > 0.15 ? 'Good' : p < 0.05 ? 'Bad' : 'N', rating_stability: d == null ? '-' : d < 1 ? 'Good' : d > 2 ? 'Bad' : 'N' };
+  return { rating_growth: g == null ? '-' : g > 0.2 ? 'Good' : g < 0 ? 'Bad' : 'N', rating_profit: p == null ? '-' : p > 0.15 ? 'Good' : p < 0.05 ? 'Bad' : 'N', rating_stability: (m.equity != null && m.equity <= 0) ? 'Bad' : d == null ? '-' : d < 1 ? 'Good' : d > 2 ? 'Bad' : 'N' };
 }
 
 /* ================= 기업분석 ================= */
@@ -265,7 +265,7 @@ function renderCompany(d) {
       </div>
     </div>
   </div>
-  <div class="card mt"><h3>비교<small>${y}년 · 비교 기업 / 업종 평균 / 전체 합계</small></h3>
+  <div class="card mt"><h3>비교<small>${y}년 · 비교 기업 / 업종 합계 / 전체 합계 (합계 기준 비율)</small></h3>
     <div class="table-wrap"><table id="tbl-compare"></table></div>
     <div class="chart-box mt"><canvas id="ch-c-compare"></canvas></div>
   </div>`;
@@ -277,7 +277,7 @@ function renderCompany(d) {
   chart('ch-c-trend', { type: 'bar', data: { labels: d.trend.map((t) => t.year + '년'), datasets: [{ label: '매출액', data: d.trend.map((t) => t.revenue), backgroundColor: cols[0], ...barStyle }, { label: '영업이익', data: d.trend.map((t) => t.op), backgroundColor: cols[1], ...barStyle }] },
     options: { scales: { y: { ticks: { callback: (v) => v.toLocaleString() } }, x: { grid: { display: false } } }, plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 10 } }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label} ${fmtN(c.raw)}억`.replace(/<[^>]+>/g, '') } } } } });
 
-  const comp = [{ ...m, _label: m.name }, ...d.peers.map((p) => ({ ...p, _label: p.name })), ...(d.sector_avg ? [{ ...d.sector_avg, _label: `업종 평균 (${d.sector_avg.sector})` }] : []), ...(d.total_avg ? [{ ...d.total_avg, _label: '전체 합계' }] : [])];
+  const comp = [{ ...m, _label: m.name }, ...d.peers.map((p) => ({ ...p, _label: p.name })), ...(d.sector_avg ? [{ ...d.sector_avg, _label: `업종 합계 (${d.sector_avg.sector})` }] : []), ...(d.total_avg ? [{ ...d.total_avg, _label: '전체 합계' }] : [])];
   const metrics = [['매출액', 'revenue', fmtN], ['매출성장률', 'revenue_growth', (v) => fmtP(v, 1, true)], ['매출원가율', 'cogs_ratio', fmtP], ['판관비율', 'sga_ratio', fmtP], ['영업이익', 'op', fmtN], ['영업이익률', 'opm', fmtP], ['순이익률', 'net_margin', fmtP], ...SGA.map((k) => [k, 'sga_' + k, fmtP]), ['부채비율', 'debt_ratio', (v) => fmtP(v, 0)], ['재고보유일수', 'inventory_days', fmtN], ['순가용현금', 'net_cash', fmtN]];
   comp.forEach(enrich);
   $('#tbl-compare').innerHTML = `<thead><tr><th class="l">지표</th>${comp.map((c) => `<th>${esc(c._label)}</th>`).join('')}</tr></thead><tbody><tr><td class="l">간략 평가</td>${comp.map((c) => `<td>${ratings(c)}</td>`).join('')}</tr>${metrics.map(([l, k, f]) => `<tr><td class="l">${esc(l)}</td>${comp.map((c) => `<td>${f(c[k])}</td>`).join('')}</tr>`).join('')}</tbody>`;

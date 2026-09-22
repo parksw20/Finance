@@ -153,7 +153,13 @@ def ratings(m):
     d = m.get("debt_ratio")
     growth = "-" if g is None else ("Good" if g > 0.20 else "Bad" if g < 0 else "N")
     profit = "-" if p is None or (m.get("op") is None) else ("Good" if p > 0.15 else "Bad" if p < 0.05 else "N")
-    stab = "-" if d is None or m.get("equity") in (None, 0) else ("Good" if 0 <= d < 1.0 else "Bad" if d > 2.0 else "N")
+    eq = m.get("equity")
+    if eq is not None and eq <= 0 and m.get("liabilities") is not None:
+        stab = "Bad"  # 자본잠식
+    elif d is None or eq in (None, 0):
+        stab = "-"
+    else:
+        stab = "Good" if 0 <= d < 1.0 else "Bad" if d > 2.0 else "N"
     return {"rating_growth": growth, "rating_profit": profit, "rating_stability": stab}
 
 
@@ -202,7 +208,7 @@ def size_band(rev_eok):
     return "⑦1조 이상"
 
 
-def aggregate(rows_cur, rows_prev_map, label):
+def aggregate(rows_cur, label):
     """기업 지표 행들을 합산해 하나의 집계 행(업종/전체)으로."""
     cur = defaultdict(float)
     prev = defaultdict(float)
@@ -236,11 +242,11 @@ def sector_metrics(conn, year):
         all_rows.append(row)
     sectors = []
     for name, rows in by_sector.items():
-        m = aggregate(rows, None, name)
+        m = aggregate(rows, name)
         m["sector"] = name
         sectors.append(m)
     sectors.sort(key=lambda s: -(s["revenue"] or 0))
-    total = aggregate(all_rows, None, "∑ 전체 합계") if all_rows else None
+    total = aggregate(all_rows, "∑ 전체 합계") if all_rows else None
     return sectors, total
 
 

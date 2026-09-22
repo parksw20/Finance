@@ -11,6 +11,7 @@ import threading
 import traceback
 from pathlib import Path
 
+from . import categories as C
 from . import dart
 from .config import DART_API_KEY, INBOX_DIR
 from .db import get_conn, now, init_db
@@ -102,8 +103,14 @@ def refresh_dart(year=None, company_ids=None):
                 if not facts:
                     skipped.append({"name": c["name"], "reason": "매핑 가능한 계정 없음"})
                     continue
+                # 순운전자본(+/-)은 DART 표준계정이 엑셀 원장보다 거칠므로, 해당 연도에 기존 데이터가 있으면 유지
+                with get_conn() as conn:
+                    has_nwc = {r[0] for r in conn.execute(
+                        "SELECT DISTINCT fiscal_year FROM facts WHERE company_id=? AND category IN (?,?) AND source!='dart'",
+                        (c["id"], C.NWC_PLUS, C.NWC_MINUS))}
+                facts = {k: v for k, v in facts.items() if not (k[0] in dart.NWC_CATEGORIES and k[2] in has_nwc)}
                 keyed = {(c["name"], cat, item, y): a for (cat, item, y), a in facts.items()}
-                # DART 는 총계 계정만 제공 → 해당 (기업, 계정분류, 연도)의 기존 항목을 DART 값으로 대체
+                # 해당 (기업, 계정분류, 연도)의 기존 항목을 DART 값으로 대체
                 with get_conn() as conn:
                     for (cat, _item, y) in facts:
                         conn.execute("DELETE FROM facts WHERE company_id=? AND category=? AND fiscal_year=?", (c["id"], cat, y))

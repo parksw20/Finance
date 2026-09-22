@@ -16,8 +16,12 @@ def start():
     if not REFRESH_SCHEDULE:
         log.info("REFRESH_SCHEDULE 비어 있음 → 자동 갱신 비활성")
         return None
-    _scheduler = BackgroundScheduler(timezone=None)
-    trigger = CronTrigger.from_crontab(REFRESH_SCHEDULE)
+    try:
+        trigger = CronTrigger.from_crontab(REFRESH_SCHEDULE)
+    except ValueError as e:
+        log.error("REFRESH_SCHEDULE 형식 오류(%r): %s → 자동 갱신 비활성", REFRESH_SCHEDULE, e)
+        return None
+    _scheduler = BackgroundScheduler()
     _scheduler.add_job(run_refresh, trigger, id="refresh", name="데이터 갱신", max_instances=1, coalesce=True)
     _scheduler.start()
     log.info("자동 갱신 스케줄: %s", REFRESH_SCHEDULE)

@@ -107,7 +107,10 @@ def parse_workbook(path):
 
 
 def write_to_db(companies, account_map, facts, source="excel", replace_company_facts=True):
-    """파싱 결과를 DB에 반영. 반환: 기록된 fact 수."""
+    """파싱 결과를 DB에 반영. 반환: 기록된 fact 수.
+
+    replace_company_facts=True 면 facts 에 등장하는 기업의 기존 데이터를 (소스와 무관하게) 모두 지우고 새로 기록한다.
+    엑셀 원장은 해당 기업의 전체 데이터이므로 오래된 행이 남지 않도록 하기 위함."""
     ts = now()
     with get_conn() as conn:
         for c in companies.values():
@@ -131,7 +134,7 @@ def write_to_db(companies, account_map, facts, source="excel", replace_company_f
         if replace_company_facts:
             touched = {ids[n] for (n, _, _, _) in facts if n in ids}
             for cid in touched:
-                conn.execute("DELETE FROM facts WHERE company_id=? AND source=?", (cid, source))
+                conn.execute("DELETE FROM facts WHERE company_id=?", (cid,))
         n = 0
         for (name, cat, item, year), amt in facts.items():
             conn.execute(

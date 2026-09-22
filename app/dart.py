@@ -37,6 +37,10 @@ STANDARD_MAP = {
 }
 
 # 순운전자본 구성 계정 (재무상태표 유동 항목 중 매핑)
+# DART 로 덮어쓰는 계정분류 (총계 성격). 판관비 세부(①~⑨)는 DART 에 없으므로 제외
+REPLACE_CATEGORIES = set(C.IS_ITEMS + C.CF_ITEMS + [C.ASSETS, C.LIAB, C.EQUITY, C.RETAINED, C.INVENTORY, C.ROU, C.LEASE])
+NWC_CATEGORIES = {C.NWC_PLUS, C.NWC_MINUS}
+
 NWC_PLUS_NAMES = {"현금및현금성자산", "단기금융상품", "단기금융자산", "매출채권", "매출채권및기타채권", "기타유동금융자산", "단기대여금", "기타수취채권"}
 NWC_MINUS_NAMES = {"매입채무", "매입채무및기타채무", "단기차입금", "유동성장기부채", "유동성장기차입금", "미지급금", "기타유동금융부채", "단기금융부채", "계약부채"}
 
@@ -125,7 +129,7 @@ def to_facts(rows, year, account_map):
                 cat = C.NWC_PLUS
             elif nm in NWC_MINUS_NAMES:
                 cat = C.NWC_MINUS
-        if cat is None:
+        if cat is None or cat not in REPLACE_CATEGORIES | NWC_CATEGORIES:
             continue
         if sj == "CIS" and cat in (C.REVENUE, C.COGS, C.GROSS, C.SGA, C.OP, C.NET) and any(k[0] == cat for k in facts):
             continue  # 손익계산서(IS)가 있으면 포괄손익(CIS) 중복 무시
