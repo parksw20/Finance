@@ -90,6 +90,9 @@ def refresh_dart(year=None, company_ids=None):
     with get_conn() as conn:
         log_id = _log_start(conn, "dart")
         year = year or default_year(conn)
+        if year is None:
+            _log_end(conn, log_id, "skipped", 0, "데이터가 없어 기준 연도를 정할 수 없음 (seed 또는 엑셀을 먼저 적재하세요)")
+            return {"skipped": "기준 연도 없음"}
         account_map = {r["source_name"]: r["category"] for r in conn.execute("SELECT * FROM account_map")}
         q = "SELECT id, name, corp_code, fiscal_month FROM companies"
         if company_ids:
@@ -213,6 +216,13 @@ def main():
     ap.add_argument("--file", help="특정 엑셀 파일을 즉시 임포트")
     a = ap.parse_args()
     init_db()
+    # DB 가 비어 있으면(CI 등 최초 실행) seed 를 먼저 적재해야 갱신 대상 기업이 생김
+    with get_conn() as conn:
+        empty = conn.execute("SELECT COUNT(*) FROM facts").fetchone()[0] == 0
+    if empty:
+        from .seed import load_seed
+
+        print("seed 적재:", load_seed())
     if a.file:
         print(import_file(a.file))
         return
