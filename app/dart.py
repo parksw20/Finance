@@ -11,9 +11,32 @@ import re
 import zipfile
 import xml.etree.ElementTree as ET
 
+import logging
+import time
+
 import requests
 
 from . import categories as C
+
+log = logging.getLogger("finance.dart")
+_session = requests.Session()
+
+
+def _get(url, params, timeout=20, retries=2):
+    """DART GET (타임아웃 20초, 일시 오류 시 재시도). 마지막 실패는 예외로 전파."""
+    last = None
+    for attempt in range(retries + 1):
+        try:
+            r = _session.get(url, params=params, timeout=timeout)
+            r.raise_for_status()
+            return r
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as e:  # noqa: PERF203
+            last = e
+            if isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code < 500:
+                raise
+            log.warning("DART 요청 실패(%d/%d) %s: %s", attempt + 1, retries + 1, params.get("corp_code", ""), e)
+            time.sleep(1.5 * (attempt + 1))
+    raise last
 from .config import DART_API_KEY, DATA_DIR
 
 BASE = "https://opendart.fss.or.kr/api"
@@ -59,8 +82,8 @@ def load_corp_codes(force=False):
     """{corp_name: {"corp_code":..., "stock_code":...}}"""
     if CORP_CACHE.exists() and not force:
         return json.loads(CORP_CACHE.read_text(encoding="utf-8"))
-    r = requests.get(f"{BASE}/corpCode.xml", params={"crtfc_key": _key()}, timeout=60)
-    r.raise_for_status()
+    log.info("DART 기업코드 목록 다운로드…")
+    r = _get(f"{BASE}/corpCode.xml", {"crtfc_key": _key()}, timeout=120, retries=1)
     zf = zipfile.ZipFile(io.BytesIO(r.content))
     xml = zf.read(zf.namelist()[0])
     root = ET.fromstring(xml)
@@ -96,8 +119,7 @@ REPORT_CODES = {"FY": "11011", "Q1": "11013", "Q2": "11012", "Q3": "11014"}
 
 def fetch_company_info(corp_code):
     """기업개황: 결산월(acc_mt), 종목코드 등. 실패 시 None."""
-    r = requests.get(f"{BASE}/company.json", params={"crtfc_key": _key(), "corp_code": corp_code}, timeout=30)
-    r.raise_for_status()
+    r = _get(f"{BASE}/company.json", {"crtfc_key": _key(), "corp_code": corp_code})
     js = r.json()
     if js.get("status") != "000":
         return None
@@ -109,12 +131,10 @@ def fetch_statements(corp_code, year, reprt_code="11011", prefer=None):
     """사업연도·보고서 코드의 전체 재무제표. 연결(CFS) 우선, 없으면 별도(OFS).
     prefer 에 'CFS'/'OFS' 를 주면 그것만 조회 (연간에서 확인된 구분을 분기에 재사용해 호출 수 절감)."""
     for fs_div in ((prefer,) if prefer else ("CFS", "OFS")):
-        r = requests.get(
+        r = _get(
             f"{BASE}/fnlttSinglAcntAll.json",
-            params={"crtfc_key": _key(), "corp_code": corp_code, "bsns_year": year, "reprt_code": reprt_code, "fs_div": fs_div},
-            timeout=60,
+            {"crtfc_key": _key(), "corp_code": corp_code, "bsns_year": year, "reprt_code": reprt_code, "fs_div": fs_div},
         )
-        r.raise_for_status()
         js = r.json()
         if js.get("status") == "000" and js.get("list"):
             return fs_div, js["list"]

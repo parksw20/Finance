@@ -7,6 +7,7 @@
 수동 실행:  python -m app.refresh [--dart] [--inbox] [--year 2025]
 """
 import argparse
+import logging
 import threading
 import traceback
 from pathlib import Path
@@ -18,6 +19,7 @@ from .db import get_conn, now, init_db
 from .importer import import_file, write_to_db
 from .metrics import default_year
 
+log = logging.getLogger("finance.refresh")
 _lock = threading.Lock()
 _state = {"running": False, "last": None, "cancel": False, "started_at": None}
 
@@ -107,8 +109,10 @@ def refresh_dart(year=None, company_ids=None):
                 skipped.append({"name": c["name"], "reason": "사용자 중단"})
                 break
             if idx == 1 or idx % 5 == 0:
+                msg = f"{idx}/{len(companies)} 처리 중 · {c['name']} (갱신 {len(updated)}, 건너뜀 {len(skipped)}, 오류 {len(errors)})"
+                log.info(msg)
                 with get_conn() as conn:
-                    _log_progress(conn, log_id, f"{idx}/{len(companies)} 처리 중 · {c['name']} (갱신 {len(updated)}, 건너뜀 {len(skipped)}, 오류 {len(errors)})")
+                    _log_progress(conn, log_id, msg)
             rec = None
             if c["corp_code"]:
                 rec = {"corp_code": c["corp_code"], "stock_code": ""}
@@ -164,6 +168,7 @@ def refresh_dart(year=None, company_ids=None):
                 nq = len({(k[2], k[3]) for k in all_facts if k[3] != "FY"})
                 updated.append({"name": c["name"], "fs": fs_used, "facts": n, "quarters": nq})
             except Exception as e:  # noqa: BLE001
+                log.warning("%s: %s", c["name"], e)
                 errors.append({"name": c["name"], "error": str(e)})
         status = "ok" if not errors else ("partial" if updated else "error")
         nq = sum(u.get("quarters", 0) for u in updated)
@@ -219,6 +224,7 @@ def main():
     ap.add_argument("--year", type=int, default=None, help="DART 조회 사업연도")
     ap.add_argument("--file", help="특정 엑셀 파일을 즉시 임포트")
     a = ap.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", force=True)
     init_db()
     # DB 가 비어 있으면(CI 등 최초 실행) seed 를 먼저 적재해야 갱신 대상 기업이 생김
     with get_conn() as conn:

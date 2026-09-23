@@ -30,6 +30,8 @@ jobs:
       - run: pip install -r requirements.txt
       - name: DART 갱신 (DART_API_KEY 시크릿이 있을 때만)
         if: ${{ env.DART_API_KEY != '' }}
+        timeout-minutes: 40
+        continue-on-error: true
         env:
           DART_QUARTERLY: "true"
         run: python -m app.refresh --dart
