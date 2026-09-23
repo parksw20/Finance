@@ -130,19 +130,23 @@ def refresh_dart(year=None, company_ids=None):
                         with get_conn() as conn:
                             conn.execute("UPDATE companies SET fiscal_month=? WHERE id=?", (info["fiscal_month"], c["id"]))
                 # 수집 대상: (연도, 기간) — 연간은 year, 분기는 year 와 다음 연도(진행 중인 해)
-                targets = [(year, "FY")]
-                if DART_QUARTERLY:
-                    targets += [(y, q) for y in (year, year + 1) for q in ("Q1", "Q2", "Q3")]
-                all_facts = {}
-                fs_used = None
-                for y, period in targets:
-                    fs_div, rows = dart.fetch_statements(rec["corp_code"], y, dart.REPORT_CODES[period])
-                    if not rows:
-                        continue
-                    fs_used = fs_used or fs_div
-                    all_facts.update(dart.to_facts(rows, y, account_map, period))
-                if not all_facts:
+                # 연간 사업보고서를 먼저 조회. 없으면(비상장·미제출) 분기 조회 없이 건너뜀
+                fs_used, rows = dart.fetch_statements(rec["corp_code"], year, dart.REPORT_CODES["FY"])
+                if not rows:
                     skipped.append({"name": c["name"], "reason": f"{year}년 사업보고서 없음(비상장 또는 미제출)"})
+                    continue
+                all_facts = dict(dart.to_facts(rows, year, account_map, "FY"))
+                if DART_QUARTERLY:
+                    # 연간에서 확인된 연결/별도 구분을 그대로 써서 분기당 1회만 호출
+                    for y in (year, year + 1):
+                        for q in ("Q1", "Q2", "Q3"):
+                            _fs, qrows = dart.fetch_statements(rec["corp_code"], y, dart.REPORT_CODES[q], prefer=fs_used)
+                            if qrows:
+                                all_facts.update(dart.to_facts(qrows, y, account_map, q))
+                            elif y == year + 1:
+                                break  # 진행 중인 해는 최신 분기까지만 존재 → 이후 분기는 조회 생략
+                if not all_facts:
+                    skipped.append({"name": c["name"], "reason": "매핑 가능한 계정 없음"})
                     continue
                 # 순운전자본(+/-)은 DART 표준계정이 엑셀 원장보다 거칠므로, 연간은 기존 데이터가 있으면 유지
                 with get_conn() as conn:

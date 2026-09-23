@@ -105,9 +105,10 @@ def fetch_company_info(corp_code):
     return {"fiscal_month": int(acc) if acc.isdigit() else None, "stock_code": (js.get("stock_code") or "").strip(), "corp_name": js.get("corp_name")}
 
 
-def fetch_statements(corp_code, year, reprt_code="11011"):
-    """사업연도·보고서 코드의 전체 재무제표. 연결(CFS) 우선, 없으면 별도(OFS)."""
-    for fs_div in ("CFS", "OFS"):
+def fetch_statements(corp_code, year, reprt_code="11011", prefer=None):
+    """사업연도·보고서 코드의 전체 재무제표. 연결(CFS) 우선, 없으면 별도(OFS).
+    prefer 에 'CFS'/'OFS' 를 주면 그것만 조회 (연간에서 확인된 구분을 분기에 재사용해 호출 수 절감)."""
+    for fs_div in ((prefer,) if prefer else ("CFS", "OFS")):
         r = requests.get(
             f"{BASE}/fnlttSinglAcntAll.json",
             params={"crtfc_key": _key(), "corp_code": corp_code, "bsns_year": year, "reprt_code": reprt_code, "fs_div": fs_div},
