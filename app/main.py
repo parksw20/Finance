@@ -14,7 +14,7 @@ from . import scheduler
 from .config import DART_API_KEY, INBOX_DIR, REFRESH_ON_START, REFRESH_SCHEDULE, STATIC_DIR
 from .db import get_conn, init_db, connect
 from .metrics import available_periods, available_years, company_metrics, default_year, derive_q4, fill_derived, load_amounts, load_amounts_all, load_sga_detail, sector_metrics, compute_ratios
-from .refresh import close_stale_runs, refresh_state, run_refresh, refresh_inbox
+from .refresh import close_stale_runs, refresh_state, request_cancel, run_refresh, refresh_inbox
 from .seed import load_seed, backfill_listed
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -268,6 +268,11 @@ def refresh(source: str = Query("all", pattern="^(all|inbox|dart)$"), year: int 
     sources = ("inbox", "dart") if source == "all" else (source,)
     threading.Thread(target=run_refresh, args=(sources, year), daemon=True).start()
     return {"status": "started", "sources": sources}
+
+
+@app.post("/api/refresh/cancel")
+def refresh_cancel():
+    return {"cancelled": request_cancel()}
 
 
 @app.get("/api/refresh/status")

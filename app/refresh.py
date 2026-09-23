@@ -19,7 +19,15 @@ from .importer import import_file, write_to_db
 from .metrics import default_year
 
 _lock = threading.Lock()
-_state = {"running": False, "last": None}
+_state = {"running": False, "last": None, "cancel": False, "started_at": None}
+
+
+def request_cancel():
+    """진행 중인 갱신에 중단 요청 (현재 기업 처리 후 종료)."""
+    if _state["running"]:
+        _state["cancel"] = True
+        return True
+    return False
 
 
 def _log_start(conn, source):
@@ -44,6 +52,8 @@ def refresh_inbox(manual=False):
     INBOX_DIR.mkdir(parents=True, exist_ok=True)
     files = sorted(p for p in INBOX_DIR.iterdir() if p.suffix.lower() in (".xlsm", ".xlsx") and not p.name.startswith("~$"))
     for p in files:
+        if _state["cancel"]:
+            break
         st = p.stat()
         with get_conn() as conn:
             prev = conn.execute("SELECT mtime, size FROM import_files WHERE path=?", (str(p),)).fetchone()
@@ -90,6 +100,9 @@ def refresh_dart(year=None, company_ids=None):
     try:
         codes = dart.load_corp_codes()
         for idx, c in enumerate(companies, 1):
+            if _state["cancel"]:
+                skipped.append({"name": c["name"], "reason": "사용자 중단"})
+                break
             if idx == 1 or idx % 5 == 0:
                 with get_conn() as conn:
                     _log_progress(conn, log_id, f"{idx}/{len(companies)} 처리 중 · {c['name']} (갱신 {len(updated)}, 건너뜀 {len(skipped)}, 오류 {len(errors)})")
@@ -148,6 +161,8 @@ def refresh_dart(year=None, company_ids=None):
         status = "ok" if not errors else ("partial" if updated else "error")
         nq = sum(u.get("quarters", 0) for u in updated)
         msg = f"갱신 {len(updated)}개, 건너뜀 {len(skipped)}개, 오류 {len(errors)}개 (연간 {year}년, 분기 데이터 {nq}건)"
+        if _state["cancel"]:
+            status, msg = "cancelled", "사용자 중단 · " + msg
     except Exception as e:  # noqa: BLE001
         status, msg = "error", f"{e}"
     with get_conn() as conn:
@@ -170,6 +185,8 @@ def run_refresh(sources=("inbox", "dart"), year=None):
     if not _lock.acquire(blocking=False):
         return {"status": "busy", "message": "이미 갱신이 진행 중입니다"}
     _state["running"] = True
+    _state["cancel"] = False
+    _state["started_at"] = now()
     try:
         result = {"started_at": now()}
         if "inbox" in sources:

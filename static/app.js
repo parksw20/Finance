@@ -351,8 +351,9 @@ function renderCompany(d) {
 
 /* ================= 데이터 ================= */
 function bindData() {
-  const run = (src) => async () => { $$('#view-data .btn').forEach((b) => b.disabled = true); await api(`/api/refresh?source=${src}`, { method: 'POST' }); await new Promise((r) => setTimeout(r, 800)); await loadData(); $$('#view-data .btn').forEach((b) => b.disabled = false); };
+  const run = (src) => async () => { $$('#view-data .btn').forEach((b) => b.disabled = true); await api(`/api/refresh?source=${src}`, { method: 'POST' }); await new Promise((r) => setTimeout(r, 800)); await loadData(); $$('#view-data .btn').forEach((b) => b.disabled = false); $('#btn-refresh-cancel').disabled = false; };
   $('#btn-refresh-all').onclick = run('all'); $('#btn-refresh-inbox').onclick = run('inbox'); $('#btn-refresh-dart').onclick = run('dart');
+  $('#btn-refresh-cancel').onclick = async () => { $('#btn-refresh-cancel').disabled = true; await api('/api/refresh/cancel', { method: 'POST' }); };
   $('#upload-form').onsubmit = async (e) => {
     e.preventDefault(); const f = $('#upload-file').files[0]; if (!f) return;
     const fd = new FormData(); fd.append('file', f); $('#upload-result').textContent = '업로드 중…';
@@ -364,12 +365,13 @@ let dataPoll = null;
 async function loadData() {
   const s = await api('/api/refresh/status');
   $('#data-status').innerHTML = `<table><tbody>
-    <tr><td class="l muted">상태</td><td class="l">${s.running ? '<span class="log-status running">갱신 진행 중…</span>' : '대기'}</td></tr>
+    <tr><td class="l muted">상태</td><td class="l">${s.running ? `<span class="log-status running">갱신 진행 중…</span> <span class="muted">(${(s.started_at || '').replace('T', ' ')} 시작)</span>` : '대기'}</td></tr>
     <tr><td class="l muted">스케줄</td><td class="l">${s.schedule ? `<code>${esc(s.schedule)}</code> (cron)` : '자동 갱신 꺼짐'}</td></tr>
     <tr><td class="l muted">다음 실행</td><td class="l">${s.next_run ? s.next_run.replace('T', ' ').slice(0, 19) : '–'}</td></tr>
     <tr><td class="l muted">DART 연동</td><td class="l">${s.dart_enabled ? '<span class="pos">사용 (API 키 설정됨)</span>' : '<span class="muted">미설정 – .env 에 DART_API_KEY 입력</span>'}</td></tr>
     <tr><td class="l muted">기준 기간</td><td class="l">${L(state.year)}</td></tr>
     <tr><td class="l muted">12월 외 결산</td><td class="l">${(state.meta.non_december_fy || []).length ? esc(state.meta.non_december_fy.join(', ')) + ' <span class="muted">(회계연도 기준으로 표시됨)</span>' : '<span class="muted">없음 (DART 갱신 후 자동 확인)</span>'}</td></tr></tbody></table>`;
+  $('#btn-refresh-cancel').style.display = s.running ? '' : 'none';
   $('#tbl-log').innerHTML = `<thead><tr><th>#</th><th class="l">소스</th><th class="l">시작</th><th class="l">종료</th><th class="l">상태</th><th>행 수</th><th class="l">메시지</th></tr></thead><tbody>${s.logs.map((l) => `<tr><td>${l.id}</td><td class="l">${esc(l.source)}</td><td class="l">${l.started_at}</td><td class="l">${l.finished_at || ''}</td><td class="l"><span class="log-status ${l.status}">${l.status}</span></td><td>${l.rows_written ?? ''}</td><td class="l"><pre class="msg">${esc(l.message || '')}</pre></td></tr>`).join('') || '<tr><td colspan="7" class="l muted">이력 없음</td></tr>'}</tbody>`;
   $('#tbl-files').innerHTML = `<thead><tr><th class="l">파일</th><th class="l">임포트 시각</th><th>크기</th></tr></thead><tbody>${s.files.map((f) => `<tr><td class="l">${esc(f.path.split('/').pop())}</td><td class="l">${f.imported_at}</td><td>${(f.size / 1024).toFixed(0)} KB</td></tr>`).join('') || '<tr><td colspan="3" class="l muted">data/inbox 에 엑셀 파일을 넣거나 위에서 업로드하세요</td></tr>'}</tbody>`;
   if (s.running && !dataPoll) dataPoll = setInterval(async () => { const st = await api('/api/refresh/status?limit=1'); if (!st.running) { clearInterval(dataPoll); dataPoll = null; await loadMeta(); await loadAll(); await loadData(); } else { const row = $('#tbl-log tbody tr'); if (row && st.logs[0]) row.querySelector('pre.msg').textContent = st.logs[0].message || ''; } }, 2000);
