@@ -1,10 +1,10 @@
 name: Publish dashboard to GitHub Pages
 
+# 참고: GitHub 호스팅 러너(해외)에서는 DART API 응답이 매우 느려 자동 배포에 쓰지 않습니다.
+# 공개 페이지는 PC 에서 `publish.bat`(python -m app.publish) 로 docs/ 를 푸시하고,
+# 저장소 Settings → Pages → Source 를 "Deploy from a branch" + 폴더 /docs 로 설정해 배포합니다.
+# 이 워크플로는 seed 데이터만으로 배포하는 비상용이며 수동 실행 시에만 동작합니다.
 on:
-  push:
-    branches: [main, master, claude/inspiring-shannon-texink]
-  schedule:
-    - cron: "0 21 * * *"   # 매일 06:00 KST
   workflow_dispatch:
 
 permissions:
@@ -19,8 +19,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      DART_API_KEY: ${{ secrets.DART_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,13 +26,6 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: DART 갱신 (DART_API_KEY 시크릿이 있을 때만)
-        if: ${{ env.DART_API_KEY != '' }}
-        timeout-minutes: 40
-        continue-on-error: true
-        env:
-          DART_QUARTERLY: "true"
-        run: python -m app.refresh --dart
       - name: 정적 사이트 내보내기
         run: python -m app.export_static site
       - uses: actions/upload-pages-artifact@v3

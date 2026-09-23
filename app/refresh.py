@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import categories as C
 from . import dart
-from .config import DART_API_KEY, DART_QUARTERLY, INBOX_DIR
+from .config import DART_API_KEY, DART_QUARTERLY, INBOX_DIR, PUBLISH_AFTER_REFRESH
 from .db import get_conn, now, init_db
 from .importer import import_file, write_to_db
 from .metrics import default_year
@@ -205,6 +205,13 @@ def run_refresh(sources=("inbox", "dart"), year=None):
             result["inbox"] = refresh_inbox(manual=True)
         if "dart" in sources:
             result["dart"] = refresh_dart(year)
+        if PUBLISH_AFTER_REFRESH:
+            try:
+                from .publish import publish
+
+                result["publish"] = publish()
+            except Exception as e:  # noqa: BLE001
+                result["publish"] = {"error": str(e)}
         result["finished_at"] = now()
         _state["last"] = result
         return result

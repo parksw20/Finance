@@ -1,0 +1,1 @@
+{"running":false,"last":null,"cancel":false,"started_at":null,"schedule":"0 6 * * *","next_run":null,"dart_enabled":false,"logs":[{"id":1,"source":"dart","started_at":"2026-09-22T05:33:04","finished_at":"2026-09-22T05:33:04","status":"skipped","rows_written":0,"message":"DART_API_KEY 미설정 → 건너뜀 (.env 또는 키체인에 키를 넣고 서버를 재시작하세요)"}],"files":[]}

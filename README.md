@@ -59,20 +59,19 @@ uvicorn app.main:app --port 8000     # 또는 run.bat / ./run.sh [포트]
 
 ## GitHub Pages 로 외부 공개 (정적 스냅샷)
 
-이 앱은 Python 서버가 필요하므로 GitHub Pages 에 그대로 올릴 수 없습니다. 대신 API 결과를 JSON 으로 내보낸 **조회 전용 스냅샷**을 Pages 에 배포합니다.
+이 앱은 Python 서버가 필요하므로 GitHub Pages 에 그대로 올릴 수 없습니다. 대신 API 결과를 JSON 으로 내보낸 **조회 전용 스냅샷**을 `docs/` 폴더에 커밋하고, Pages 가 그 폴더를 서비스합니다.
 
 ```bash
-python -m app.export_static site     # site/ 에 index.html + data/*.json 생성 (로컬 확인: python -m http.server -d site)
+publish.bat                 # = python -m app.publish : docs/ 내보내기 → commit → push
+python -m app.publish --no-push
 ```
 
-`.github/workflows/pages.yml` 이 push·매일 06:00(KST)·수동 실행 시 자동으로 seed 적재 → DART 갱신 → 내보내기 → Pages 배포를 수행합니다.
+설정 (저장소 → Settings → Pages): **Source** 를 `Deploy from a branch`, 브랜치는 작업 브랜치, 폴더는 `/docs` 로 선택합니다.
+푸시 후 1~2분이면 `https://<계정>.github.io/Finance/` 에 반영됩니다.
 
-설정 (저장소 → Settings):
-1. **Pages → Build and deployment → Source** 를 `GitHub Actions` 로 선택
-2. **Secrets and variables → Actions → New repository secret** 에 `DART_API_KEY` 등록 (없으면 seed 데이터만 배포)
-3. Actions 탭에서 "Publish dashboard to GitHub Pages" 를 한 번 수동 실행(Run workflow)
-
-스냅샷 페이지에서는 갱신·업로드 버튼이 동작하지 않습니다. 엑셀로 추가한 데이터를 공개 페이지에도 반영하려면 `python scripts/export_seed.py 파일.xlsm` 으로 `data/seed/*.csv` 를 갱신해 커밋하세요.
+- 매일 자동 갱신 뒤 공개 페이지도 같이 갱신하려면 `.env` 에 `PUBLISH_AFTER_REFRESH=true` (PC 에서 git push 인증이 되어 있어야 함).
+- GitHub Actions 로 DART 를 직접 호출하는 방식은 해외 러너에서 DART 응답이 매우 느려 사용하지 않습니다. `.github/workflows/pages.yml` 은 seed 데이터만으로 배포하는 비상용(수동 실행)입니다.
+- 스냅샷 페이지에서는 갱신·업로드 버튼이 동작하지 않습니다.
 
 ## 구조
 

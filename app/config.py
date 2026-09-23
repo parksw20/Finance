@@ -45,3 +45,5 @@ REFRESH_SCHEDULE = os.environ.get("REFRESH_SCHEDULE", "0 6 * * *").strip()
 REFRESH_ON_START = os.environ.get("REFRESH_ON_START", "false").lower() in ("1", "true", "yes")
 # DART 분기보고서(1분기·반기·3분기)도 수집할지. false 면 연간만
 DART_QUARTERLY = os.environ.get("DART_QUARTERLY", "true").lower() in ("1", "true", "yes")
+# 자동 갱신 후 docs/ 스냅샷을 내보내고 git push 할지 (GitHub Pages 자동 갱신)
+PUBLISH_AFTER_REFRESH = os.environ.get("PUBLISH_AFTER_REFRESH", "false").lower() in ("1", "true", "yes")
