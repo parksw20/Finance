@@ -18,7 +18,9 @@ const fmtP = (v, d = 1, sign = false) => {
   const cls = sign ? (v > 0 ? 'pos' : v < 0 ? 'neg' : '') : '';
   return `<span class="${cls}">${sign && v > 0 ? '+' : ''}${s}</span>`;
 };
-const fmtPp = (v) => (v == null || isNaN(v)) ? '<span class="muted">–</span>' : `<span class="${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}">${v > 0 ? '+' : ''}${(v * 100).toFixed(1)}%p</span>`;
+/** %p 증감. invert=true 면 비용 비율(낮을수록 좋음)이라 색을 반대로 */
+const fmtPp = (v, invert = false) => (v == null || isNaN(v)) ? '<span class="muted">–</span>' : `<span class="${(invert ? -v : v) > 0 ? 'pos' : (invert ? -v : v) < 0 ? 'neg' : ''}">${v > 0 ? '+' : ''}${(v * 100).toFixed(1)}%p</span>`;
+const fmtPpInv = (v) => fmtPp(v, true);
 const badge = (v) => `<span class="badge ${v === '-' || !v ? 'dash' : v}">${v || '-'}</span>`;
 const ratings = (m) => `<div class="rating-row"><span class="lbl">성장성</span>${badge(m.rating_growth)}<span class="lbl">수익성</span>${badge(m.rating_profit)}<span class="lbl">안정성</span>${badge(m.rating_stability)}</div>`;
 const listedChip = (m) => m.listed == null ? '' : ` <span class="chip sm ${m.listed ? 'listed' : 'unlisted'}" title="${m.listed ? (m.stock_code ? '종목코드 ' + m.stock_code : '상장사') : '비상장사 (DART 재무제표 API 미제공)'}">${m.listed ? '상장' : '비상장'}</span>`;
@@ -113,7 +115,7 @@ function renderSector() {
   ].map(([t, v, s]) => `<div class="card tile"><h3>${t}</h3><div class="value">${v}</div><div class="sub">${s}</div></div>`).join('');
 
   const labels = sectors.map((s) => s.sector);
-  const colorFor = (v) => (v >= 0 ? css('--s1') : css('--s8'));
+  const colorFor = (v) => (v >= 0 ? css('--pos') : css('--neg'));
   chart('ch-sector-growth', { type: 'bar', data: { labels, datasets: [{ data: sectors.map((s) => s.revenue_growth), backgroundColor: sectors.map((s) => colorFor(s.revenue_growth)), ...barStyle }] },
     options: { indexAxis: 'y', scales: { x: { ticks: { callback: pctTick } }, y: { grid: { display: false } } }, plugins: { tooltip: { callbacks: { label: (c) => ` ${(c.raw * 100).toFixed(1)}%  (${fmtN(sectors[c.dataIndex].revenue_prev)} → ${fmtN(sectors[c.dataIndex].revenue)}억)`.replace(/<[^>]+>/g, '') } } } } });
   chart('ch-sector-opm', { type: 'bar', data: { labels, datasets: [{ label: L(py), data: sectors.map((s) => s.opm_prev), backgroundColor: css('--border'), ...barStyle }, { label: L(year), data: sectors.map((s) => s.opm), backgroundColor: sectors.map((s) => colorFor(s.opm)), ...barStyle }] },
@@ -132,12 +134,12 @@ function renderSector() {
   const cols = SERIES();
   chart('ch-sector-sga', { type: 'bar', data: { labels, datasets: sgaKeys.map((k, i) => ({ label: k.replace(/^.\s?/, ''), data: sectors.map((s) => s.sga_items[k]?.ratio || 0), backgroundColor: cols[i % cols.length], borderWidth: 1, borderColor: css('--surface'), maxBarThickness: 30 })) },
     options: { indexAxis: 'y', scales: { x: { stacked: true, ticks: { callback: pctTick } }, y: { stacked: true, grid: { display: false } } }, plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10 } }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label} ${(c.raw * 100).toFixed(1)}%` } } } } });
-  chart('ch-sector-debt', { type: 'bar', data: { labels, datasets: [{ label: L(py), data: sectors.map((s) => s.debt_ratio_prev), backgroundColor: css('--border'), ...barStyle }, { label: L(year), data: sectors.map((s) => s.debt_ratio), backgroundColor: sectors.map((s) => (s.debt_ratio > 2 ? css('--s8') : s.debt_ratio < 1 ? css('--s1') : css('--neutral'))), ...barStyle }] },
+  chart('ch-sector-debt', { type: 'bar', data: { labels, datasets: [{ label: L(py), data: sectors.map((s) => s.debt_ratio_prev), backgroundColor: css('--border'), ...barStyle }, { label: L(year), data: sectors.map((s) => s.debt_ratio), backgroundColor: sectors.map((s) => (s.debt_ratio > 2 ? css('--neg') : s.debt_ratio < 1 ? css('--pos') : css('--neutral'))), ...barStyle }] },
     options: { indexAxis: 'y', scales: { x: { ticks: { callback: pctTick } }, y: { grid: { display: false } } }, plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 10 } }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label} ${(c.raw * 100).toFixed(0)}%` } } } } });
 
   const rankCard = (title, list, fmt = (v) => fmtP(v, 1, true)) => {
     const max = Math.max(...list.map((r) => Math.abs(r.value || 0)), 1e-9);
-    return `<div class="card"><h3>${title}</h3><ol class="rank-list">${list.map((r, i) => `<li><span class="idx">${i + 1}</span><span class="nm" data-id="${r.id ?? ''}">${esc(r.name)}${r.sector ? ` <span class="sec">${esc(r.sector)}</span>` : ''}</span><span class="bar" style="width:${Math.abs(r.value) / max * 60}px;background:${r.value < 0 ? css('--s8') : css('--s1')}"></span><span class="val">${fmt(r.value)}</span></li>`).join('') || '<li class="muted">해당 없음</li>'}</ol></div>`;
+    return `<div class="card"><h3>${title}</h3><ol class="rank-list">${list.map((r, i) => `<li><span class="idx">${i + 1}</span><span class="nm" data-id="${r.id ?? ''}">${esc(r.name)}${r.sector ? ` <span class="sec">${esc(r.sector)}</span>` : ''}</span><span class="bar" style="width:${Math.abs(r.value) / max * 60}px;background:${r.value < 0 ? css('--neg') : css('--pos')}"></span><span class="val">${fmt(r.value)}</span></li>`).join('') || '<li class="muted">해당 없음</li>'}</ol></div>`;
   };
   $('#rankings').innerHTML = rankCard(`매출 ${GL()} 상위 <small>매출 100억 이상</small>`, rankings.growth) + rankCard('역성장 기업', rankings.decline) + rankCard('영업이익률 상위', rankings.opm, (v) => fmtP(v)) + rankCard('매출원가율 낮은 기업', rankings.cogs_ratio, (v) => fmtP(v)) + rankCard('광고선전비 비율 높은 기업', rankings.ad_ratio, (v) => fmtP(v)) + rankCard('업종 성장률 / 영업이익률', rankings.sector_growth.map((r) => ({ ...r, name: r.name, sector: `영업이익률 ${((rankings.sector_opm.find((x) => x.name === r.name)?.value || 0) * 100).toFixed(1)}%` })));
   $$('#rankings .nm[data-id]').forEach((el) => { if (el.dataset.id) el.onclick = () => openCompany(+el.dataset.id); });
@@ -147,8 +149,8 @@ function renderSector() {
 const COLSETS = {
   pl: (y) => [
     { g: '매출', cols: [[L(y - 1), 'revenue_prev', fmtN], [L(y), 'revenue', fmtN], [GL(), 'revenue_growth', (v) => fmtP(v, 1, true)]] },
-    { g: '매출원가율', cols: [[L(y), 'cogs_ratio', fmtP], ['증감', 'cogs_ratio_delta', fmtPp]] },
-    { g: '판관비율', cols: [[L(y), 'sga_ratio', fmtP], ['증감', 'sga_ratio_delta', fmtPp]] },
+    { g: '매출원가율', cols: [[L(y), 'cogs_ratio', fmtP], ['증감', 'cogs_ratio_delta', fmtPpInv]] },
+    { g: '판관비율', cols: [[L(y), 'sga_ratio', fmtP], ['증감', 'sga_ratio_delta', fmtPpInv]] },
     { g: '영업이익', cols: [[L(y - 1), 'op_prev', fmtN], [L(y), 'op', fmtN], ['이익률', 'opm', fmtP], ['증감', 'opm_delta', fmtPp]] },
     { g: '순이익', cols: [['순이익률', 'net_margin', fmtP]] },
   ],
@@ -309,7 +311,7 @@ function renderCompany(d) {
   <div class="grid two mt">
     <div class="card"><h3>손익계산서<small>억원 · 비율은 매출 대비</small></h3><div class="table-wrap"><table>
       <thead><tr><th class="l">계정</th><th>${L(py)}</th><th>${L(y)}</th><th>${GL()}</th><th class="group-start">${L(py)} 비율</th><th>${L(y)} 비율</th><th>GAP</th></tr></thead><tbody>
-      ${stmt.map((r) => `<tr class="${r.is_sub ? 'sub' : ''}"><td class="l">${esc(r.category)}</td><td>${fmtN(r.prev)}</td><td>${fmtN(r.cur)}</td><td>${fmtP(r.growth, 1, true)}</td><td class="group-start">${fmtP(r.ratio_prev)}</td><td>${fmtP(r.ratio_cur)}</td><td>${fmtPp(r.gap)}</td></tr>`).join('')}
+      ${stmt.map((r) => `<tr class="${r.is_sub ? 'sub' : ''}"><td class="l">${esc(r.category)}</td><td>${fmtN(r.prev)}</td><td>${fmtN(r.cur)}</td><td>${fmtP(r.growth, 1, true)}</td><td class="group-start">${fmtP(r.ratio_prev)}</td><td>${fmtP(r.ratio_cur)}</td><td>${fmtPp(r.gap, r.is_sub || r.category.startsWith('Ⅱ') || r.category.startsWith('Ⅳ'))}</td></tr>`).join('')}
       </tbody></table></div>
       <h3 class="mt">재무상태 · 현금흐름</h3><div class="table-wrap"><table><thead><tr><th class="l">계정</th><th>${L(py)}</th><th>${L(y)}</th><th>증감률</th></tr></thead><tbody>
       ${d.balance.map((r) => `<tr><td class="l">${esc(r.category)}</td><td>${r.is_ratio ? fmtP(r.prev, 0) : fmtN(r.prev)}</td><td>${r.is_ratio ? fmtP(r.cur, 0) : fmtN(r.cur)}</td><td>${fmtP(r.growth, 1, true)}</td></tr>`).join('')}
