@@ -29,7 +29,33 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 
 /* ---------- API ---------- */
 const qp = () => `year=${state.year}&period=${state.period}`;
+const STATIC = !!window.STATIC_MODE;
+/** 정적 모드: /api/... 요청을 data/*.json 파일로 매핑 */
+function staticPath(path) {
+  const [p, q] = path.split('?');
+  const qs = new URLSearchParams(q || '');
+  const y = qs.get('year') || state.year, per = qs.get('period') || state.period;
+  if (p === '/api/meta') return './data/meta.json';
+  if (p === '/api/sectors') return `./data/sectors_${y}_${per}.json`;
+  if (p === '/api/screener') return `./data/screener_${y}_${per}.json`;
+  if (p.startsWith('/api/company/')) return `./data/company_${p.split('/')[3]}_${y}_${per}.json`;
+  if (p.startsWith('/api/refresh/status')) return './data/refresh_status.json';
+  return null;
+}
 async function api(path, opts) {
+  if (STATIC) {
+    if (opts && opts.method && opts.method !== 'GET') throw new Error('정적 스냅샷 페이지에서는 갱신·업로드를 할 수 없습니다. 로컬 서버에서 실행하세요.');
+    const sp = staticPath(path);
+    if (!sp) throw new Error('정적 모드에서 지원하지 않는 요청: ' + path);
+    const r = await fetch(sp);
+    if (!r.ok) throw new Error(`${r.status} ${sp}`);
+    const d = await r.json();
+    if (path.startsWith('/api/company/')) {  // 비교 기업은 스크리너 데이터로 채움
+      const ids = (new URLSearchParams(path.split('?')[1] || '').get('peers') || '').split(',').filter(Boolean).map(Number);
+      d.peers = ids.map((id) => state.screener?.companies.find((c) => c.id === id)).filter(Boolean).map(enrich);
+    }
+    return d;
+  }
   const r = await fetch(path, opts);
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
   return r.json();
@@ -91,7 +117,8 @@ async function loadMeta() {
   $('#unit-note').textContent = state.period === 'FY' ? '단위: 억원' : `단위: 억원 · ${state.period.replace('Q', '')}분기 기준, 성장률은 전년 동기 대비`;
   const lr = m.last_refresh;
   const dot = m.refresh_running ? 'running' : lr ? (lr.status === 'ok' ? 'ok' : lr.status === 'error' ? 'error' : '') : '';
-  $('#refresh-info').innerHTML = `<span class="status-dot ${dot}"></span>${m.refresh_running ? '갱신 중…' : lr ? `최근 갱신 ${lr.finished_at || lr.started_at} (${lr.source})` : '갱신 이력 없음'}${m.next_run ? ` · 다음 ${m.next_run.slice(0, 16).replace('T', ' ')}` : ''}`;
+  if (STATIC) { $('#refresh-info').innerHTML = `<span class="status-dot ok"></span>스냅샷 ${(m.static_generated_at || '').replace('T', ' ').slice(0, 16)} 생성 · 조회 전용`; }
+  else $('#refresh-info').innerHTML = `<span class="status-dot ${dot}"></span>${m.refresh_running ? '갱신 중…' : lr ? `최근 갱신 ${lr.finished_at || lr.started_at} (${lr.source})` : '갱신 이력 없음'}${m.next_run ? ` · 다음 ${m.next_run.slice(0, 16).replace('T', ' ')}` : ''}`;
 }
 
 async function loadAll() {
@@ -365,6 +392,14 @@ function bindData() {
 }
 let dataPoll = null;
 async function loadData() {
+  if (STATIC) {
+    $$('#view-data .btn, #upload-form').forEach((el) => el.style.display = 'none');
+    const s = await api('/api/refresh/status');
+    $('#data-status').innerHTML = `<div class="note">이 페이지는 <b>정적 스냅샷</b>(GitHub Pages)입니다. 갱신·업로드는 로컬 서버(<code>uvicorn app.main:app</code>)에서만 가능하고, 스냅샷은 GitHub Actions 스케줄로 다시 생성됩니다.<br>생성 시각: ${(state.meta.static_generated_at || '').replace('T', ' ')}</div>`;
+    $('#tbl-log').innerHTML = `<thead><tr><th>#</th><th class="l">소스</th><th class="l">시작</th><th class="l">종료</th><th class="l">상태</th><th>행 수</th><th class="l">메시지</th></tr></thead><tbody>${(s.logs || []).map((l) => `<tr><td>${l.id}</td><td class="l">${esc(l.source)}</td><td class="l">${l.started_at}</td><td class="l">${l.finished_at || ''}</td><td class="l"><span class="log-status ${l.status}">${l.status}</span></td><td>${l.rows_written ?? ''}</td><td class="l"><pre class="msg">${esc(l.message || '')}</pre></td></tr>`).join('') || '<tr><td colspan="7" class="l muted">이력 없음</td></tr>'}</tbody>`;
+    $('#tbl-files').innerHTML = '<tbody><tr><td class="l muted">정적 모드에서는 표시하지 않음</td></tr></tbody>';
+    return;
+  }
   const s = await api('/api/refresh/status');
   $('#data-status').innerHTML = `<table><tbody>
     <tr><td class="l muted">상태</td><td class="l">${s.running ? `<span class="log-status running">갱신 진행 중…</span> <span class="muted">(${(s.started_at || '').replace('T', ' ')} 시작)</span>` : '대기'}</td></tr>

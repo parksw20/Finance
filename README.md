@@ -57,6 +57,23 @@ uvicorn app.main:app --port 8000     # 또는 run.bat / ./run.sh [포트]
 - `.env`의 `REFRESH_SCHEDULE`(cron 5필드, 기본 `0 6 * * *` = 매일 06:00)에 따라 앱 프로세스 안의 APScheduler가 inbox → DART 순으로 갱신합니다. 서버(uvicorn)가 실행 중이어야 합니다.
 - 시스템 cron을 쓰려면 `python -m app.refresh`를 등록해도 됩니다.
 
+## GitHub Pages 로 외부 공개 (정적 스냅샷)
+
+이 앱은 Python 서버가 필요하므로 GitHub Pages 에 그대로 올릴 수 없습니다. 대신 API 결과를 JSON 으로 내보낸 **조회 전용 스냅샷**을 Pages 에 배포합니다.
+
+```bash
+python -m app.export_static site     # site/ 에 index.html + data/*.json 생성 (로컬 확인: python -m http.server -d site)
+```
+
+`.github/workflows/pages.yml` 이 push·매일 06:00(KST)·수동 실행 시 자동으로 seed 적재 → DART 갱신 → 내보내기 → Pages 배포를 수행합니다.
+
+설정 (저장소 → Settings):
+1. **Pages → Build and deployment → Source** 를 `GitHub Actions` 로 선택
+2. **Secrets and variables → Actions → New repository secret** 에 `DART_API_KEY` 등록 (없으면 seed 데이터만 배포)
+3. Actions 탭에서 "Publish dashboard to GitHub Pages" 를 한 번 수동 실행(Run workflow)
+
+스냅샷 페이지에서는 갱신·업로드 버튼이 동작하지 않습니다. 엑셀로 추가한 데이터를 공개 페이지에도 반영하려면 `python scripts/export_seed.py 파일.xlsm` 으로 `data/seed/*.csv` 를 갱신해 커밋하세요.
+
 ## 구조
 
 ```

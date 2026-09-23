@@ -7,3 +7,4 @@ data/corp_codes.json
 data/inbox/*
 !data/inbox/.gitkeep
 .venv/
+site/
