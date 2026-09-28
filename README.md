@@ -66,11 +66,11 @@ publish.bat                 # = python -m app.publish : docs/ 내보내기 → c
 python -m app.publish --no-push
 ```
 
-설정 (저장소 → Settings → Pages): **Source** 를 `Deploy from a branch`, 브랜치는 작업 브랜치, 폴더는 `/docs` 로 선택합니다.
-푸시 후 1~2분이면 `https://<계정>.github.io/Finance/` 에 반영됩니다.
+설정 (저장소 → Settings → Pages): **Source** 를 `GitHub Actions` 로 둡니다. `docs/` 가 바뀐 push 마다 `.github/workflows/pages.yml` 이 그 폴더를 그대로 배포하며, 1~2분이면 `https://<계정>.github.io/Finance/` 에 반영됩니다.
+(`Deploy from a branch` + 폴더 `/docs` 로 설정해도 동작합니다. 이 경우 워크플로는 필요 없습니다.)
 
 - 매일 자동 갱신 뒤 공개 페이지도 같이 갱신하려면 `.env` 에 `PUBLISH_AFTER_REFRESH=true` (PC 에서 git push 인증이 되어 있어야 함).
-- GitHub Actions 로 DART 를 직접 호출하는 방식은 해외 러너에서 DART 응답이 매우 느려 사용하지 않습니다. `.github/workflows/pages.yml` 은 seed 데이터만으로 배포하는 비상용(수동 실행)입니다.
+- GitHub Actions 에서 DART 를 직접 호출하는 방식은 해외 러너에서 DART 응답이 매우 느려 사용하지 않습니다. 워크플로는 커밋된 `docs/` 를 배포만 합니다.
 - 스냅샷 페이지에서는 갱신·업로드 버튼이 동작하지 않습니다.
 
 ## 구조

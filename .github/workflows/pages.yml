@@ -1,10 +1,13 @@
 name: Publish dashboard to GitHub Pages
 
-# 참고: GitHub 호스팅 러너(해외)에서는 DART API 응답이 매우 느려 자동 배포에 쓰지 않습니다.
-# 공개 페이지는 PC 에서 `publish.bat`(python -m app.publish) 로 docs/ 를 푸시하고,
-# 저장소 Settings → Pages → Source 를 "Deploy from a branch" + 폴더 /docs 로 설정해 배포합니다.
-# 이 워크플로는 seed 데이터만으로 배포하는 비상용이며 수동 실행 시에만 동작합니다.
+# PC 에서 `publish.bat`(python -m app.publish) 로 만든 docs/ 스냅샷을 그대로 Pages 에 배포합니다.
+# (GitHub 호스팅 러너에서는 DART API 응답이 매우 느려 여기서 DART 를 호출하지 않습니다)
+# docs/ 가 바뀐 push 마다 자동 실행, 수동 실행도 가능. Pages 설정: Settings → Pages → Source = GitHub Actions
+
 on:
+  push:
+    branches: [main, master, claude/inspiring-shannon-texink]
+    paths: ["docs/**"]
   workflow_dispatch:
 
 permissions:
@@ -17,27 +20,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - run: pip install -r requirements.txt
-      - name: 정적 사이트 내보내기
-        run: python -m app.export_static site
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
   deploy:
-    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
       - id: deployment
         uses: actions/deploy-pages@v4
