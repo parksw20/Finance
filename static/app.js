@@ -47,7 +47,7 @@ async function api(path, opts) {
     if (opts && opts.method && opts.method !== 'GET') throw new Error('정적 스냅샷 페이지에서는 갱신·업로드를 할 수 없습니다. 로컬 서버에서 실행하세요.');
     const sp = staticPath(path);
     if (!sp) throw new Error('정적 모드에서 지원하지 않는 요청: ' + path);
-    const r = await fetch(sp);
+    const r = await fetch(sp + (window.STATIC_VERSION ? `?v=${window.STATIC_VERSION}` : ''), { cache: 'no-cache' });
     if (!r.ok) throw new Error(`${r.status} ${sp}`);
     const d = await r.json();
     if (path.startsWith('/api/company/')) {  // 비교 기업은 스크리너 데이터로 채움

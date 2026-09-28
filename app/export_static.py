@@ -42,8 +42,11 @@ def export(out_dir: Path):
         shutil.rmtree(out_dir / "static")
     shutil.copytree(STATIC_DIR, out_dir / "static")
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    ver = now().replace("-", "").replace(":", "").replace("T", "")
+    html = html.replace('href="/static/style.css"', f'href="./static/style.css?v={ver}"').replace('src="/static/app.js"', f'src="./static/app.js?v={ver}"')
     html = html.replace('href="/static/', 'href="./static/').replace('src="/static/', 'src="./static/')
-    html = html.replace("<script src=\"./static/app.js\"></script>", f"<script>window.STATIC_MODE = true; window.STATIC_GENERATED_AT = {json.dumps(now())};</script>\n<script src=\"./static/app.js\"></script>")
+    html = html.replace("<title>", '<meta http-equiv="Cache-Control" content="no-cache">\n<title>')
+    html = html.replace(f"<script src=\"./static/app.js?v={ver}\"></script>", f"<script>window.STATIC_MODE = true; window.STATIC_GENERATED_AT = {json.dumps(now())}; window.STATIC_VERSION = {json.dumps(ver)};</script>\n<script src=\"./static/app.js?v={ver}\"></script>")
     (out_dir / "index.html").write_text(html, encoding="utf-8")
     (out_dir / ".nojekyll").write_text("", encoding="utf-8")
 
